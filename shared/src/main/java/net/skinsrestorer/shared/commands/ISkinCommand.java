@@ -33,9 +33,6 @@ import net.skinsrestorer.shared.storage.CooldownStorage;
 import net.skinsrestorer.shared.storage.Locale;
 import net.skinsrestorer.shared.utils.C;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -215,6 +212,11 @@ public interface ISkinCommand {
 
             if (!C.allowedSkinUrl(skin)) {
                 sender.sendMessage(Locale.SKINURL_DISALLOWED);
+                return false;
+            }
+
+            if (Config.MINESKINQUELIMIT_ENABLED && plugin.getMineSkinAPI().getQueSize() > Config.MINESKINQUELIMIT_SIZE) {
+                sender.sendMessage(Locale.SKINURL_QUE_FULL);
                 return false;
             }
 

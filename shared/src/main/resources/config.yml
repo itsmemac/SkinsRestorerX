@@ -135,6 +135,13 @@ RestrictSkinUrls:
 # ((?) not needed for small servers / those not using the SkinUrl api (?))
 MineskinAPIKey: "key"
 
+# SkinsRestorer has a build in que system for MineSkin (skin url).
+# To reduce threads / processes, you can enable the limit on this que system.
+# This will cancel the command and ask the player to try again later (locale: SKINURL_QUE_FULL)
+MineskinQueLimit:
+  Enabled: false
+  Size: 10
+
 #################
 # Compatibility #
 #################

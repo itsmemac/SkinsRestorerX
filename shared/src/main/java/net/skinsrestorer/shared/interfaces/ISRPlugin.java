@@ -26,6 +26,7 @@ import net.skinsrestorer.shared.utils.CommandPropertiesManager;
 import net.skinsrestorer.shared.utils.CommandReplacements;
 import net.skinsrestorer.shared.utils.MetricsCounter;
 import net.skinsrestorer.shared.utils.SharedMethods;
+import net.skinsrestorer.shared.utils.connections.MineSkinAPI;
 import net.skinsrestorer.shared.utils.connections.MojangAPI;
 import net.skinsrestorer.shared.utils.log.SRLogger;
 
@@ -38,6 +39,8 @@ public interface ISRPlugin {
     File getDataFolder();
 
     SkinStorage getSkinStorage();
+
+    MineSkinAPI getMineSkinAPI();
 
     String getVersion();
 

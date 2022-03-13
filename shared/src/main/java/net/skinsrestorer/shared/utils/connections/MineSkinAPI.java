@@ -198,4 +198,8 @@ public class MineSkinAPI implements IMineSkinAPI {
 
         return "";
     }
+
+    public int getQueSize() {
+        return queue.size();
+    }
 }

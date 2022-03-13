@@ -26,5 +26,11 @@ import net.skinsrestorer.api.property.IProperty;
 import java.util.UUID;
 
 public interface IMineSkinAPI {
+
+    /**
+     * Use SkinsRestorerAPI.genSKin
+     */
     IProperty genSkin(String url, SkinVariant skinVariant, UUID methodUUID) throws SkinRequestException;
+
+    int getQueSize();
 }

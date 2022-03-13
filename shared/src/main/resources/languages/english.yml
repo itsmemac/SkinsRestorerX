@@ -109,6 +109,9 @@ skinDisabled: "&4Error&8: &cThis skin is disabled by an administrator."
 # config.RestrictSkinUrls will make this line appear.
 urlSkin-DomainBlocked: "&4Error&8: &cThis domain has not been allowed by the administrator."
 
+# config.MineskinQueLimit will make this line appear
+urlSkin-QueFull: "&4Error&8: &cSkin generating que is full, please try again later."
+
   ##################
   # Error messages #
   ##################
