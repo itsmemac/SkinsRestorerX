@@ -28,6 +28,7 @@ import co.aikar.commands.annotation.HelpCommand;
 import lombok.RequiredArgsConstructor;
 import net.skinsrestorer.bukkit.SkinsGUI;
 import net.skinsrestorer.bukkit.SkinsRestorer;
+import net.skinsrestorer.bukkit.utils.gui.GUI;
 import net.skinsrestorer.shared.storage.CooldownStorage;
 import net.skinsrestorer.shared.storage.Locale;
 import org.bukkit.Bukkit;
@@ -60,8 +61,8 @@ public class GUICommand extends BaseCommand {
             player.sendMessage(Locale.SKINSMENU_OPEN);
 
             SkinsGUI.getMenus().put(player.getName(), 0);
-            Inventory inventory = skinsGUI.getGUI(player, 0);
-            Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> player.openInventory(inventory));
+            GUI gui = skinsGUI.getGUI(player, 0);
+            Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, gui::openGUI);
         });
     }
 }

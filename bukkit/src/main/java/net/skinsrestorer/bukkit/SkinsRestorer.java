@@ -37,6 +37,7 @@ import net.skinsrestorer.bukkit.listener.ProtocolLibJoinListener;
 import net.skinsrestorer.bukkit.utils.BukkitConsoleImpl;
 import net.skinsrestorer.bukkit.utils.UpdateDownloaderGithub;
 import net.skinsrestorer.bukkit.utils.WrapperBukkit;
+import net.skinsrestorer.bukkit.utils.gui.GUI;
 import net.skinsrestorer.shared.exception.InitializeException;
 import net.skinsrestorer.shared.interfaces.ISRPlugin;
 import net.skinsrestorer.shared.storage.Config;
@@ -249,9 +250,9 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
 
                             SkinsGUI skinsGUI = new SkinsGUI(this, srLogger);
                             ++page; // start counting from 1
-                            Inventory inventory = skinsGUI.getGUI(player, page, newSkinList);
+                            GUI gui = skinsGUI.getGUI(player, page, newSkinList);
 
-                            Bukkit.getScheduler().scheduleSyncDelayedTask(this, () -> player.openInventory(inventory));
+                            Bukkit.getScheduler().scheduleSyncDelayedTask(this, () -> gui.openGUI());
                         }
                     } catch (Exception e) {
                         e.printStackTrace();

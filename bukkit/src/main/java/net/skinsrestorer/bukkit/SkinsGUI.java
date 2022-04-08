@@ -25,6 +25,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import net.skinsrestorer.api.bukkit.BukkitHeadAPI;
 import net.skinsrestorer.api.property.IProperty;
+import net.skinsrestorer.bukkit.utils.gui.GUI;
 import net.skinsrestorer.shared.storage.Locale;
 import net.skinsrestorer.shared.utils.C;
 import net.skinsrestorer.shared.utils.log.SRLogger;
@@ -44,16 +45,67 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 
 @RequiredArgsConstructor
-public class SkinsGUI extends ItemStack implements Listener {
+public class SkinsGUI implements Listener {
     @Getter
     private static final Map<String, Integer> menus = new ConcurrentHashMap<>();
     private final SkinsRestorer plugin;
     private final SRLogger log;
 
-    public Inventory getGUI(Player player, int page, Map<String, IProperty> skinsList) {
-        Inventory inventory = Bukkit.createInventory(player, 54, C.c(Locale.SKINSMENU_TITLE_NEW).replace("%page", String.valueOf(page)));
+    public GUI getGUI(Player player, int page, Map<String, IProperty> skinsList) {
+        GUI gui = new GUI(C.c(Locale.SKINSMENU_TITLE_NEW).replace("%page", String.valueOf(page)), 6, plugin, player);
+
+        Runnable noneAction = () -> {
+            getGUI(player, page, skinsList).openGUI();
+        };
+        Runnable nextAction = () -> {
+            if (plugin.isBungeeEnabled()) {
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    int currentPageG = getMenus().get(player.getName());
+                    getMenus().put(player.getName(), currentPageG + 1);
+                    plugin.requestSkinsFromBungeeCord(player, currentPageG + 1);
+                });
+            } else {
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    final int currentPageA = getMenus().get(player.getName());
+                    getMenus().put(player.getName(), currentPageA + 1);
+                    GUI newGUI = getGUI((player).getPlayer(), currentPageA + 1);
+
+                    Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () ->
+                            newGUI.openGUI());
+                });
+            }
+        };
+        Runnable previousAction = () -> {
+            if (plugin.isBungeeEnabled()) {
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    int currentPageY = getMenus().get(player.getName());
+                    getMenus().put(player.getName(), currentPageY - 1);
+                    plugin.requestSkinsFromBungeeCord(player, currentPageY - 1);
+                });
+            } else {
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    final int currentPageB = getMenus().get(player.getName());
+                    getMenus().put(player.getName(), currentPageB - 1);
+                    GUI newGUI = getGUI((player).getPlayer(), currentPageB - 1);
+
+                    Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () ->
+                            newGUI.openGUI());
+                });
+            }
+        };
+        Runnable deleteAction = () -> {
+            if (plugin.isBungeeEnabled()) {
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () ->
+                        plugin.requestSkinClearFromBungeeCord(player));
+                player.closeInventory();
+            } else {
+                plugin.getSkinCommand().onSkinClear(player);
+                player.closeInventory();
+            }
+        };
 
         ItemStack none = new GuiGlass(GlassType.NONE).getItemStack();
         ItemStack delete = new GuiGlass(GlassType.DELETE).getItemStack();
@@ -61,60 +113,71 @@ public class SkinsGUI extends ItemStack implements Listener {
         ItemStack next = new GuiGlass(GlassType.NEXT).getItemStack();
 
         // White Glass line
-        inventory.setItem(36, none);
-        inventory.setItem(37, none);
-        inventory.setItem(38, none);
-        inventory.setItem(39, none);
-        inventory.setItem(40, none);
-        inventory.setItem(41, none);
-        inventory.setItem(42, none);
-        inventory.setItem(43, none);
-        inventory.setItem(44, none);
-
-        // Empty place previous
-        inventory.setItem(45, none);
-        inventory.setItem(46, none);
-        inventory.setItem(47, none);
-
-        // Middle button //remove skin
-        inventory.setItem(48, delete);
-        inventory.setItem(49, delete);
-        inventory.setItem(50, delete);
-
-
-        // Empty place next
-        inventory.setItem(53, none);
-        inventory.setItem(52, none);
-        inventory.setItem(51, none);
+        IntStream.rangeClosed(36, 44).forEach(i -> gui.addItem(i, none).addDefaultEvent(noneAction));
 
         // If page is above 1, adding Previous Page button.
         if (page > 1) {
-            inventory.setItem(45, prev);
-            inventory.setItem(46, prev);
-            inventory.setItem(47, prev);
+            gui.addItem(45, prev).addDefaultEvent(previousAction);
+            gui.addItem(46, prev).addDefaultEvent(previousAction);
+            gui.addItem(47, prev).addDefaultEvent(previousAction);
+        } else {
+            // Empty place previous
+            gui.addItem(45, none).addDefaultEvent(noneAction);
+            gui.addItem(46, none).addDefaultEvent(noneAction);
+            gui.addItem(47, none).addDefaultEvent(noneAction);
         }
 
-        skinsList.forEach((name, property) -> {
-            if (name.chars().anyMatch(i -> Character.isLetter(i) && Character.isUpperCase(i))) {
-                log.info("ERROR: skin " + name + ".skin contains a Upper case!");
-                log.info("Please rename the file name to a lower case!.");
-                return;
+        // Middle button //remove skin
+        gui.addItem(48, delete).addDefaultEvent(deleteAction);
+        gui.addItem(49, delete).addDefaultEvent(deleteAction);
+        gui.addItem(50, delete).addDefaultEvent(deleteAction);
+
+        int i = 0;
+        for (Map.Entry<String, IProperty> entry : skinsList.entrySet()) {
+            if (i == 36) {
+                break;
             }
 
-            inventory.addItem(createSkull(name, property));
-        });
+            if (entry.getKey().chars().anyMatch(c -> Character.isLetter(c) && Character.isUpperCase(c))) {
+                log.info("ERROR: skin " + entry.getKey() + ".skin contains a Upper case!");
+                log.info("Please rename the file name to a lower case!.");
+                continue;
+            }
 
-        // If the page is not empty, adding Next Page button.
-        if (inventory.firstEmpty() == -1 || inventory.getItem(26) != null && page < 999) {
-            inventory.setItem(53, next);
-            inventory.setItem(52, next);
-            inventory.setItem(51, next);
+            gui.addItem(i, createSkull(entry.getKey(), entry.getValue()))
+                    .addDefaultEvent(() -> {
+                        if (plugin.isBungeeEnabled()) {
+                            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                                plugin.requestSkinSetFromBungeeCord(player, entry.getKey());
+                            });
+                            player.closeInventory();
+                        } else {
+                            // TODO: use #setSkin() function from SkinCommand.class
+                            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                                plugin.getSkinCommand().onSkinSetShort(player, entry.getKey());
+                            });
+                            player.closeInventory();
+                        }
+                    });
+            i++;
         }
 
-        return inventory;
+        // If the page is not empty, adding Next Page button.
+        if (i == 36 && page < 999) {
+            gui.addItem(53, next).addDefaultEvent(nextAction);
+            gui.addItem(52, next).addDefaultEvent(nextAction);
+            gui.addItem(51, next).addDefaultEvent(nextAction);
+        } else {
+            // Empty place next
+            gui.addItem(53, none).addDefaultEvent(noneAction);
+            gui.addItem(52, none).addDefaultEvent(noneAction);
+            gui.addItem(51, none).addDefaultEvent(noneAction);
+        }
+
+        return gui;
     }
 
-    public Inventory getGUI(Player player, int page) {
+    public GUI getGUI(Player player, int page) {
         if (page > 999)
             page = 999;
         int skinNumber = 36 * page;
@@ -142,109 +205,6 @@ public class SkinsGUI extends ItemStack implements Listener {
         }
 
         return is;
-    }
-
-    // TODO: increase performance by excluding non item clicks from this event before event#getView() (use if performance will be increased.)
-    @EventHandler(ignoreCancelled = true)
-    public void onCLick(InventoryClickEvent event) {
-        try {
-            if (event.getClickedInventory() == null || // Cancel if clicked outside inventory
-                    event.getView().getTopInventory().getType() != InventoryType.CHEST || // Cancel if clicked in not inventory
-                    !(event.getWhoClicked() instanceof Player) || //cancel if no player
-                    (!event.getView().getTitle().startsWith("Skins Menu - Page ") && !event.getView().getTitle().replaceAll("[0-9]", "").contains(Locale.SKINSMENU_TITLE_NEW.replace("%page", "").replaceAll("[0-9]", "")))) //cancel if title name is not same
-                return;
-        } catch (IllegalStateException ignored) {
-            return;
-        }
-
-        final Player player = (Player) event.getWhoClicked();
-
-        // Cancel picking up items
-        if (event.getCurrentItem() == null) {
-            event.setCancelled(true);
-            return;
-        }
-
-        final ItemStack currentItem = event.getCurrentItem();
-
-        // Cancel white panels.
-        if (!currentItem.hasItemMeta()) {
-            event.setCancelled(true);
-            return;
-        }
-
-        if (plugin.isBungeeEnabled()) {
-            switch (Objects.requireNonNull(XMaterial.matchXMaterial(currentItem))) {
-                case PLAYER_HEAD:
-                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                        String skin = Objects.requireNonNull(currentItem.getItemMeta()).getDisplayName();
-                        plugin.requestSkinSetFromBungeeCord(player, skin);
-                    });
-                    player.closeInventory();
-                    break;
-                case RED_STAINED_GLASS_PANE:
-                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () ->
-                            plugin.requestSkinClearFromBungeeCord(player));
-                    player.closeInventory();
-                    break;
-                case GREEN_STAINED_GLASS_PANE:
-                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                        int currentPageG = getMenus().get(player.getName());
-                        getMenus().put(player.getName(), currentPageG + 1);
-                        plugin.requestSkinsFromBungeeCord(player, currentPageG + 1);
-                    });
-                    break;
-                case YELLOW_STAINED_GLASS_PANE:
-                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                        int currentPageY = getMenus().get(player.getName());
-                        getMenus().put(player.getName(), currentPageY - 1);
-                        plugin.requestSkinsFromBungeeCord(player, currentPageY - 1);
-                    });
-                    break;
-                default:
-                    break;
-            }
-            event.setCancelled(true);
-            return;
-        }
-
-        // TODO: use #setSkin() function from SkinCommand.class
-        switch (Objects.requireNonNull(XMaterial.matchXMaterial(currentItem))) {
-            case PLAYER_HEAD:
-                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                    final String skinName = Objects.requireNonNull(currentItem.getItemMeta()).getDisplayName();
-                    plugin.getSkinCommand().onSkinSetShort(player, skinName);
-                });
-                player.closeInventory();
-                break;
-            case RED_STAINED_GLASS_PANE:
-                plugin.getSkinCommand().onSkinClear(player);
-                player.closeInventory();
-                break;
-            case GREEN_STAINED_GLASS_PANE:
-                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                    final int currentPageA = getMenus().get(player.getName());
-                    getMenus().put(player.getName(), currentPageA + 1);
-                    Inventory newInventory = getGUI((player).getPlayer(), currentPageA + 1);
-
-                    Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () ->
-                            player.openInventory(newInventory));
-                });
-                break;
-            case YELLOW_STAINED_GLASS_PANE:
-                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                    final int currentPageB = getMenus().get(player.getName());
-                    getMenus().put(player.getName(), currentPageB - 1);
-                    Inventory newInventory = getGUI((player).getPlayer(), currentPageB - 1);
-
-                    Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () ->
-                            player.openInventory(newInventory));
-                });
-                break;
-            default:
-                break;
-        }
-        event.setCancelled(true);
     }
 
     private enum GlassType {
