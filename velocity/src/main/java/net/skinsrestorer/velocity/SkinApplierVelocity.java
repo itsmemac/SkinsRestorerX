@@ -17,7 +17,6 @@
  */
 package net.skinsrestorer.velocity;
 
-import ch.jalu.configme.SettingsManager;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.api.util.GameProfile.Property;
@@ -26,16 +25,17 @@ import net.skinsrestorer.api.property.SkinProperty;
 import net.skinsrestorer.shared.api.SkinApplierAccess;
 import net.skinsrestorer.shared.api.event.EventBusImpl;
 import net.skinsrestorer.shared.api.event.SkinApplyEventImpl;
-import net.skinsrestorer.shared.config.AdvancedConfig;
+import net.skinsrestorer.shared.codec.SRServerPluginMessage;
+import net.skinsrestorer.shared.utils.AuthLibHelper;
 import net.skinsrestorer.velocity.wrapper.WrapperVelocity;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SkinApplierVelocity implements SkinApplierAccess<Player> {
-    private final SettingsManager settings;
     private final WrapperVelocity wrapper;
     private final EventBusImpl eventBus;
 
@@ -51,7 +51,7 @@ public class SkinApplierVelocity implements SkinApplierAccess<Player> {
         SkinProperty appliedProperty = applyEvent.getProperty();
 
         player.setGameProfileProperties(updatePropertiesSkin(player.getGameProfileProperties(), appliedProperty));
-        wrapper.player(player).sendUpdateRequest(settings.getProperty(AdvancedConfig.FORWARD_TEXTURES) ? appliedProperty : null);
+        wrapper.player(player).sendToMessageChannel(new SRServerPluginMessage(new SRServerPluginMessage.SkinUpdateChannelPayload(property)));
     }
 
     public GameProfile updateProfileSkin(GameProfile profile, SkinProperty property) {
@@ -65,5 +65,16 @@ public class SkinApplierVelocity implements SkinApplierAccess<Player> {
         properties.add(new Property(SkinProperty.TEXTURES_NAME, property.getValue(), property.getSignature()));
 
         return properties;
+    }
+
+    public Optional<SkinProperty> getSkinProperty(Player player) {
+        return player.getGameProfileProperties().stream()
+                .map(property -> SkinProperty.tryParse(
+                        property.getName(),
+                        property.getValue(),
+                        property.getSignature()
+                ))
+                .flatMap(Optional::stream)
+                .findFirst();
     }
 }

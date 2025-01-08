@@ -35,13 +35,16 @@ public enum PermissionRegistry {
     SKIN_SEARCH("skinsrestorer.command.search", Message.PERMISSION_COMMAND_SEARCH),
     SKIN_UPDATE("skinsrestorer.command.update", Message.PERMISSION_COMMAND_UPDATE),
     SKIN_UPDATE_OTHER("skinsrestorer.command.update.other", Message.PERMISSION_COMMAND_UPDATE_OTHER),
+    SKIN_UNDO("skinsrestorer.command.undo", Message.PERMISSION_COMMAND_UNDO),
+    SKIN_UNDO_OTHER("skinsrestorer.command.undo.other", Message.PERMISSION_COMMAND_UNDO_OTHER),
+    SKIN_FAVOURITE("skinsrestorer.command.favourite", Message.PERMISSION_COMMAND_FAVOURITE),
+    SKIN_FAVOURITE_OTHER("skinsrestorer.command.favourite.other", Message.PERMISSION_COMMAND_FAVOURITE_OTHER),
     SR_RELOAD("skinsrestorer.admincommand.reload", Message.PERMISSION_ADMINCOMMAND_RELOAD),
     SR_STATUS("skinsrestorer.admincommand.status", Message.PERMISSION_ADMINCOMMAND_STATUS),
     SR_DROP("skinsrestorer.admincommand.drop", Message.PERMISSION_ADMINCOMMAND_DROP),
     SR_INFO("skinsrestorer.admincommand.info", Message.PERMISSION_ADMINCOMMAND_INFO),
     SR_APPLY_SKIN("skinsrestorer.admincommand.applyskin", Message.PERMISSION_ADMINCOMMAND_APPLYSKIN),
     SR_CREATE_CUSTOM("skinsrestorer.admincommand.createcustom", Message.PERMISSION_ADMINCOMMAND_CREATECUSTOM),
-    SR_APPLY_SKIN_ALL("skinsrestorer.admincommand.applyskinall", Message.PERMISSION_ADMINCOMMAND_APPLYSKINALL),
     SR_PURGE_OLD_DATA("skinsrestorer.admincommand.purgeolddata", Message.PERMISSION_ADMINCOMMAND_PURGEOLDDATA),
     SR_DUMP("skinsrestorer.admincommand.dump", Message.PERMISSION_ADMINCOMMAND_DUMP),
 
@@ -58,6 +61,6 @@ public enum PermissionRegistry {
     }
 
     public static Permission forSkin(String skinName) {
-        return Permission.of("skinsrestorer.skin." + skinName);
+        return Permission.of("skinsrestorer.skin.%s".formatted(skinName));
     }
 }
