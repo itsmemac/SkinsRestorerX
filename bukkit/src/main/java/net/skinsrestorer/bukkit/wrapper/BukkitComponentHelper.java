@@ -17,12 +17,16 @@
  */
 package net.skinsrestorer.bukkit.wrapper;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
-import net.skinsrestorer.shared.utils.ComponentString;
+import net.skinsrestorer.shadow.kyori.adventure.platform.bukkit.BukkitComponentSerializer;
+import net.skinsrestorer.shadow.kyori.adventure.text.Component;
+import net.skinsrestorer.shared.subjects.messages.ComponentString;
 
 public class BukkitComponentHelper {
     public static Component deserialize(ComponentString messageJson) {
-        return GsonComponentSerializer.gson().deserialize(messageJson.jsonString());
+        return BukkitComponentSerializer.gson().deserialize(messageJson.jsonString());
+    }
+
+    public static String toStupidHex(ComponentString messageJson) {
+        return BukkitComponentSerializer.legacy().serialize(deserialize(messageJson));
     }
 }

@@ -21,12 +21,13 @@ import ch.jalu.injector.Injector;
 import lombok.RequiredArgsConstructor;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import net.skinsrestorer.api.PropertyUtils;
-import net.skinsrestorer.api.SkinsRestorer;
+import net.skinsrestorer.api.SkinsRestorerProvider;
 import net.skinsrestorer.api.exception.DataRequestException;
 import net.skinsrestorer.api.property.SkinIdentifier;
 import net.skinsrestorer.api.property.SkinProperty;
 import net.skinsrestorer.bukkit.utils.SkinApplyBukkitAdapter;
 import net.skinsrestorer.shared.log.SRLogger;
+import net.skinsrestorer.shared.storage.HardcodedSkins;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -37,10 +38,7 @@ import java.util.Optional;
 
 @RequiredArgsConstructor
 public class SRPlaceholderAPIExpansion extends PlaceholderExpansion {
-    private static final String STEVE_URL = "https://textures.minecraft.net/texture/6d3b06c38504ffc0229b9492147c69fcf59fd2ed7885f78502152f77b4d50de1";
-    private static final String ALEX_URL = "https://textures.minecraft.net/texture/fb9ab3483f8106ecc9e76bd47c71312b0f16a58784d606864f3b3e9cb1fd7b6c";
     private static final String ERROR_MESSAGE = "Error";
-    private final SkinsRestorer api;
     private final SRLogger logger;
     private final PluginDescriptionFile description;
     private final Injector injector;
@@ -74,7 +72,9 @@ public class SRPlaceholderAPIExpansion extends PlaceholderExpansion {
                 return ERROR_MESSAGE;
             }
 
-            Optional<SkinIdentifier> skin = api.getPlayerStorage().getSkinIdOfPlayer(offlinePlayer.getUniqueId());
+            Optional<SkinIdentifier> skin = SkinsRestorerProvider.get()
+                    .getPlayerStorage()
+                    .getSkinIdOfPlayer(offlinePlayer.getUniqueId());
 
             if (skin.isPresent()) {
                 return skin.get().getIdentifier();
@@ -100,7 +100,7 @@ public class SRPlaceholderAPIExpansion extends PlaceholderExpansion {
                 Optional<SkinProperty> skin = getCurrentProperties(offlinePlayer);
 
                 if (skin.isPresent()) {
-                    return extractUrl(skin.get());
+                    return extractTextureUrl(skin.get());
                 }
 
                 if (params.startsWith("texture_url_")) {
@@ -109,13 +109,13 @@ public class SRPlaceholderAPIExpansion extends PlaceholderExpansion {
                     if (subString.equalsIgnoreCase("or_empty")) {
                         return "";
                     } else if (subString.equalsIgnoreCase("or_steve")) {
-                        return STEVE_URL;
+                        return extractTextureUrl(HardcodedSkins.STEVE.getProperty());
                     } else if (subString.equalsIgnoreCase("or_alex")) {
-                        return ALEX_URL;
+                        return extractTextureUrl(HardcodedSkins.ALEX.getProperty());
                     }
                 }
             } catch (DataRequestException e) {
-                logger.severe("Failed to get skin data of player " + offlinePlayer.getUniqueId(), e);
+                logger.severe("Failed to get skin data of player %s".formatted(offlinePlayer.getUniqueId()), e);
             }
 
             return ERROR_MESSAGE;
@@ -128,7 +128,7 @@ public class SRPlaceholderAPIExpansion extends PlaceholderExpansion {
                 Optional<SkinProperty> skin = getCurrentProperties(offlinePlayer);
 
                 if (skin.isPresent()) {
-                    return extractUrlStripped(skin.get());
+                    return extractTextureHash(skin.get());
                 }
 
                 if (params.startsWith("texture_id_")) {
@@ -137,13 +137,13 @@ public class SRPlaceholderAPIExpansion extends PlaceholderExpansion {
                     if (subString.equalsIgnoreCase("or_empty")) {
                         return "";
                     } else if (subString.equalsIgnoreCase("or_steve")) {
-                        return STEVE_URL;
+                        return extractTextureHash(HardcodedSkins.STEVE.getProperty());
                     } else if (subString.equalsIgnoreCase("or_alex")) {
-                        return ALEX_URL;
+                        return extractTextureHash(HardcodedSkins.ALEX.getProperty());
                     }
                 }
             } catch (DataRequestException e) {
-                logger.severe("Failed to get skin data of player " + offlinePlayer.getUniqueId(), e);
+                logger.severe("Failed to get skin data of player %s".formatted(offlinePlayer.getUniqueId()), e);
             }
 
             return ERROR_MESSAGE;
@@ -152,19 +152,21 @@ public class SRPlaceholderAPIExpansion extends PlaceholderExpansion {
         return null;
     }
 
-    private String extractUrl(SkinProperty property) {
+    private String extractTextureUrl(SkinProperty property) {
         return PropertyUtils.getSkinTextureUrl(property);
     }
 
-    private String extractUrlStripped(SkinProperty property) {
-        return PropertyUtils.getSkinTextureUrlStripped(property);
+    private String extractTextureHash(SkinProperty property) {
+        return PropertyUtils.getSkinTextureHash(property);
     }
 
     private Optional<SkinProperty> getCurrentProperties(OfflinePlayer offlinePlayer) throws DataRequestException {
         if (offlinePlayer instanceof Player player) {
             return injector.getSingleton(SkinApplyBukkitAdapter.class).getSkinProperty(player);
         } else {
-            return api.getPlayerStorage().getSkinForPlayer(offlinePlayer.getUniqueId(), offlinePlayer.getName());
+            return SkinsRestorerProvider.get()
+                    .getPlayerStorage()
+                    .getSkinForPlayer(offlinePlayer.getUniqueId(), offlinePlayer.getName());
         }
     }
 }

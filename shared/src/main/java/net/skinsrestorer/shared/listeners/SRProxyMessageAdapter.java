@@ -18,65 +18,39 @@
 package net.skinsrestorer.shared.listeners;
 
 import lombok.RequiredArgsConstructor;
-import net.skinsrestorer.shared.commands.library.CommandManager;
+import net.skinsrestorer.shared.codec.SRInputReader;
+import net.skinsrestorer.shared.codec.SRProxyPluginMessage;
 import net.skinsrestorer.shared.listeners.event.SRProxyMessageEvent;
-import net.skinsrestorer.shared.log.SRLogger;
-import net.skinsrestorer.shared.plugin.SRProxyAdapter;
-import net.skinsrestorer.shared.storage.SkinStorageImpl;
-import net.skinsrestorer.shared.subjects.SRCommandSender;
-import net.skinsrestorer.shared.subjects.SRProxyPlayer;
-import net.skinsrestorer.shared.utils.SRConstants;
+import net.skinsrestorer.shared.plugin.SRPlatformAdapter;
+import net.skinsrestorer.shared.utils.SRHelpers;
 
 import javax.inject.Inject;
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.util.Optional;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public final class SRProxyMessageAdapter {
-    private final SkinStorageImpl skinStorage;
-    private final SRProxyAdapter<?, ?> plugin;
-    private final CommandManager<SRCommandSender> commandManager;
-    private final SRLogger logger;
+    private final SRPlatformAdapter adapter;
+    private final GUIActionListener guiActionListener;
 
     public void handlePluginMessage(SRProxyMessageEvent event) {
         if (event.isCancelled()) {
             return;
         }
 
-        if (!event.getChannel().equals(SRConstants.MESSAGE_CHANNEL)) {
+        if (!event.getChannel().equals(SRHelpers.MESSAGE_CHANNEL)) {
             return;
         }
 
-        if (!event.isServerConnection()) {
+        if (!event.isSenderServerConnection() || !event.isReceiverProxyPlayer()) {
             event.setCancelled(true);
             return;
         }
 
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(event.getData()));
-        try {
-            String subChannel = in.readUTF();
-            Optional<SRProxyPlayer> optional = plugin.getPlayer(in.readUTF());
-
-            if (optional.isEmpty()) {
-                return;
+        adapter.runAsync(() -> {
+            SRInputReader in = new SRInputReader(event.getData());
+            SRProxyPluginMessage.ChannelPayload<?> msg = SRProxyPluginMessage.CODEC.read(in).channelPayload();
+            if (msg instanceof SRProxyPluginMessage.GUIActionChannelPayloadList actionChannelPayload) {
+                guiActionListener.handle(event.getPlayer(), actionChannelPayload.actions());
             }
-
-            SRProxyPlayer player = optional.get();
-            switch (subChannel) {
-                case "getSkins" -> {
-                    int page = Math.min(in.readInt(), 999);
-                    player.sendPage(page, skinStorage.getGUISkins(page * 36));
-                }
-                case "clearSkin" -> commandManager.executeCommand(player, "skin clear");
-                case "setSkin" -> {
-                    String skin = in.readUTF();
-                    commandManager.executeCommand(player, String.format("skin set %s", skin));
-                }
-            }
-        } catch (IOException e) {
-            logger.severe("Error while handling plugin message", e);
-        }
+        });
     }
 }

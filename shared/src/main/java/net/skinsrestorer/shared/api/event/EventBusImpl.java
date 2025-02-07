@@ -32,7 +32,7 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class EventBusImpl implements EventBus {
     private final Queue<EventSubscription<?>> subscriptions = new ConcurrentLinkedQueue<>();
-    private final SRPlatformAdapter<Object, ?> platformAdapter;
+    private final SRPlatformAdapter platformAdapter;
     private final SRLogger logger;
 
     @Override
@@ -49,7 +49,7 @@ public class EventBusImpl implements EventBus {
             try {
                 subscription.callEvent(event);
             } catch (Throwable t) {
-                logger.severe("Error while calling event " + event.getClass().getSimpleName(), t);
+                logger.severe("Error while calling event %s".formatted(event.getClass().getSimpleName()), t);
             }
         }
     }

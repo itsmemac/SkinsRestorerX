@@ -29,11 +29,15 @@ import net.skinsrestorer.api.storage.SkinStorage;
 import net.skinsrestorer.shared.config.StorageConfig;
 import net.skinsrestorer.shared.connections.MineSkinAPIImpl;
 import net.skinsrestorer.shared.connections.MojangAPIImpl;
+import net.skinsrestorer.shared.connections.RecommendationsState;
+import net.skinsrestorer.shared.connections.responses.RecommenationResponse;
 import net.skinsrestorer.shared.log.SRLogger;
 import net.skinsrestorer.shared.storage.adapter.AdapterReference;
 import net.skinsrestorer.shared.storage.adapter.StorageAdapter;
 import net.skinsrestorer.shared.storage.model.cache.MojangCacheData;
 import net.skinsrestorer.shared.storage.model.skin.*;
+import net.skinsrestorer.shared.subjects.messages.ComponentHelper;
+import net.skinsrestorer.shared.subjects.messages.ComponentString;
 import net.skinsrestorer.shared.utils.SRHelpers;
 import net.skinsrestorer.shared.utils.UUIDUtils;
 import net.skinsrestorer.shared.utils.ValidationUtil;
@@ -41,17 +45,22 @@ import net.skinsrestorer.shared.utils.ValidationUtil;
 import javax.inject.Inject;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SkinStorageImpl implements SkinStorage {
+    public static final String RECOMMENDATION_PREFIX = "sr-recommendation-";
     private final SRLogger logger;
     private final CacheStorageImpl cacheStorage;
     private final MojangAPIImpl mojangAPI;
     private final MineSkinAPIImpl mineSkinAPI;
     private final SettingsManager settings;
     private final AdapterReference adapterReference;
+    private final RecommendationsState recommendationsState;
 
     public void preloadDefaultSkins() {
         if (!settings.getProperty(StorageConfig.DEFAULT_SKINS_ENABLED)) {
@@ -64,7 +73,7 @@ public class SkinStorageImpl implements SkinStorage {
             try {
                 findOrCreateSkinData(skin);
             } catch (DataRequestException | MineSkinException e) {
-                logger.debug(String.format("DefaultSkin '%s' could not be found or requested! Removing from list..", skin), e);
+                logger.debug("DefaultSkin '%s' could not be found or requested! Removing from list..".formatted(skin), e);
                 toRemove.add(skin);
             }
         });
@@ -115,7 +124,7 @@ public class SkinStorageImpl implements SkinStorage {
             setPlayerSkinData(uuid, response.getProfileName(), skinProperty.get(), SRHelpers.getEpochSecond());
             return skinProperty;
         } catch (StorageAdapter.StorageException e) {
-            logger.warning("Failed to update skin data for " + uuid, e);
+            logger.warning("Failed to update skin data for %s".formatted(uuid), e);
             return Optional.empty();
         }
     }
@@ -167,19 +176,19 @@ public class SkinStorageImpl implements SkinStorage {
 
             return optional;
         } catch (StorageAdapter.StorageException e) {
-            logger.warning("Failed to get skin from cache for " + nameOrUniqueId, e);
+            logger.warning("Failed to get skin from cache for %s".formatted(nameOrUniqueId), e);
             return Optional.empty();
         }
     }
 
     @Override
-    public void setPlayerSkinData(UUID uuid, String lastKnownName, SkinProperty textures, long timestamp) {
-        adapterReference.get().setPlayerSkinData(uuid, PlayerSkinData.of(uuid, lastKnownName, textures, timestamp));
+    public void setPlayerSkinData(UUID uuid, String lastKnownName, SkinProperty property, long timestamp) {
+        adapterReference.get().setPlayerSkinData(uuid, PlayerSkinData.of(uuid, lastKnownName, property, timestamp));
     }
 
     @Override
-    public void setURLSkinData(String url, String mineSkinId, SkinProperty textures, SkinVariant skinVariant) {
-        adapterReference.get().setURLSkinData(url, URLSkinData.of(url, mineSkinId, textures, skinVariant));
+    public void setURLSkinData(String url, String mineSkinId, SkinProperty property, SkinVariant skinVariant) {
+        adapterReference.get().setURLSkinData(url, URLSkinData.of(url, mineSkinId, property, skinVariant));
     }
 
     @Override
@@ -188,12 +197,19 @@ public class SkinStorageImpl implements SkinStorage {
     }
 
     @Override
-    public void setCustomSkinData(String skinName, SkinProperty textures) {
-        adapterReference.get().setCustomSkinData(skinName, CustomSkinData.of(skinName, textures));
+    public void setCustomSkinData(String skinName, SkinProperty property) {
+        skinName = CustomSkinData.sanitizeCustomSkinName(skinName);
+
+        adapterReference.get().setCustomSkinData(skinName, CustomSkinData.of(skinName, null, property));
     }
 
-    public Map<String, String> getGUISkins(int offset) {
-        return adapterReference.get().getStoredGUISkins(offset);
+    public void setCustomSkinDisplayName(String skinName, ComponentString displayName) throws StorageAdapter.StorageException {
+        skinName = CustomSkinData.sanitizeCustomSkinName(skinName);
+
+        CustomSkinData customSkinData = adapterReference.get().getCustomSkinData(skinName)
+                .orElseThrow(() -> new IllegalArgumentException("Skin not found"));
+
+        adapterReference.get().setCustomSkinData(skinName, CustomSkinData.of(skinName, displayName, customSkinData.getProperty()));
     }
 
     @Override
@@ -245,10 +261,43 @@ public class SkinStorageImpl implements SkinStorage {
                 }
             }
         } catch (StorageAdapter.StorageException | DataRequestException e) {
-            logger.warning("Failed to find skin data for " + input, e);
+            logger.warning("Failed to find skin data for %s".formatted(input), e);
         }
 
         return Optional.empty();
+    }
+
+    public ComponentString resolveSkinName(SkinIdentifier identifier) {
+        return switch (identifier.getSkinType()) {
+            case PLAYER -> {
+                try {
+                    yield ComponentHelper.convertPlainToJson(adapterReference.get().getPlayerSkinData(identifier.getPlayerUniqueId())
+                            .map(PlayerSkinData::getLastKnownName)
+                            .orElse(identifier.getIdentifier()));
+                } catch (StorageAdapter.StorageException e) {
+                    logger.warning("Failed to get skin data for %s".formatted(identifier), e);
+                    yield ComponentHelper.convertPlainToJson(identifier.getIdentifier());
+                }
+            }
+            case URL, LEGACY -> ComponentHelper.convertPlainToJson(identifier.getIdentifier());
+            case CUSTOM -> {
+                if (identifier.getIdentifier().startsWith(RECOMMENDATION_PREFIX)) {
+                    RecommenationResponse.SkinInfo skinInfo = recommendationsState.getRecommendation(identifier.getIdentifier().substring(RECOMMENDATION_PREFIX.length()));
+                    if (skinInfo != null) {
+                        yield ComponentHelper.convertPlainToJson(skinInfo.getSkinName());
+                    }
+                }
+
+                try {
+                    yield adapterReference.get().getCustomSkinData(identifier.getIdentifier())
+                            .flatMap(c -> Optional.ofNullable(c.getDisplayName()))
+                            .orElse(ComponentHelper.convertPlainToJson(identifier.getIdentifier()));
+                } catch (StorageAdapter.StorageException e) {
+                    logger.warning("Failed to get skin data for %s".formatted(identifier), e);
+                    yield ComponentHelper.convertPlainToJson(identifier.getIdentifier());
+                }
+            }
+        };
     }
 
     @Override
@@ -262,7 +311,19 @@ public class SkinStorageImpl implements SkinStorage {
         }
 
         // Create new skin data
-        if (ValidationUtil.validSkinUrl(input)) {
+        if (input.startsWith(RECOMMENDATION_PREFIX)) {
+            String skinId = input.substring(RECOMMENDATION_PREFIX.length());
+            RecommenationResponse.SkinInfo skinInfo = recommendationsState.getRecommendation(skinId);
+
+            if (skinInfo == null) {
+                return Optional.empty();
+            }
+
+            SkinProperty skinProperty = skinInfo.getSkinProperty();
+            setCustomSkinData(input, skinProperty);
+
+            return Optional.of(InputDataResult.of(SkinIdentifier.ofCustom(input), skinProperty));
+        } else if (ValidationUtil.validSkinUrl(input)) {
             MineSkinResponse response = mineSkinAPI.genSkin(input, skinVariantHint);
 
             setURLSkinByResponse(input, response);
@@ -278,12 +339,23 @@ public class SkinStorageImpl implements SkinStorage {
     public Optional<SkinProperty> getSkinDataByIdentifier(SkinIdentifier identifier) {
         try {
             return switch (identifier.getSkinType()) {
-                case PLAYER -> adapterReference.get().getPlayerSkinData(UUID.fromString(identifier.getIdentifier()))
+                case PLAYER -> adapterReference.get().getPlayerSkinData(identifier.getPlayerUniqueId())
                         .map(PlayerSkinData::getProperty);
                 case URL ->
                         adapterReference.get().getURLSkinData(identifier.getIdentifier(), identifier.getSkinVariant())
                                 .map(URLSkinData::getProperty);
                 case CUSTOM -> {
+                    if (identifier.getIdentifier().startsWith(RECOMMENDATION_PREFIX)) {
+                        String skinId = identifier.getIdentifier().substring(RECOMMENDATION_PREFIX.length());
+                        RecommenationResponse.SkinInfo skinInfo = recommendationsState.getRecommendation(skinId);
+
+                        if (skinInfo == null) {
+                            yield Optional.empty();
+                        }
+
+                        yield Optional.of(skinInfo.getSkinProperty());
+                    }
+
                     Optional<SkinProperty> skinProperty = adapterReference.get().getCustomSkinData(identifier.getIdentifier())
                             .map(CustomSkinData::getProperty);
                     if (skinProperty.isPresent()) {
@@ -298,7 +370,7 @@ public class SkinStorageImpl implements SkinStorage {
             };
 
         } catch (StorageAdapter.StorageException e) {
-            logger.warning("Failed to get skin data for " + identifier, e);
+            logger.warning("Failed to get skin data for %s".formatted(identifier), e);
             return Optional.empty();
         }
     }
@@ -306,7 +378,7 @@ public class SkinStorageImpl implements SkinStorage {
     @Override
     public void removeSkinData(SkinIdentifier identifier) {
         switch (identifier.getSkinType()) {
-            case PLAYER -> adapterReference.get().removePlayerSkinData(UUID.fromString(identifier.getIdentifier()));
+            case PLAYER -> adapterReference.get().removePlayerSkinData(identifier.getPlayerUniqueId());
             case URL ->
                     adapterReference.get().removeURLSkinData(identifier.getIdentifier(), identifier.getSkinVariant());
             case CUSTOM -> adapterReference.get().removeCustomSkinData(identifier.getIdentifier());

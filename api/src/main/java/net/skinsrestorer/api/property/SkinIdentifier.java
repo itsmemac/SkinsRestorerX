@@ -41,7 +41,7 @@ public class SkinIdentifier {
     /**
      * Only used for {@link SkinType#URL}, otherwise null.
      */
-    private final SkinVariant skinVariant;
+    private final @Nullable SkinVariant skinVariant;
     @NonNull
     private final SkinType skinType;
 
@@ -95,7 +95,22 @@ public class SkinIdentifier {
      * @return A new SkinIdentifier.
      */
     @ApiStatus.Internal
-    public static SkinIdentifier of(String skinIdentifier, SkinVariant skinVariant, SkinType skinType) {
+    public static SkinIdentifier of(String skinIdentifier, @Nullable SkinVariant skinVariant, SkinType skinType) {
         return new SkinIdentifier(skinIdentifier, skinVariant, skinType);
+    }
+
+    /**
+     * Converts the {@link String} identifier to a {@link UUID}.
+     * This is only possible if the skin type is {@link SkinType#PLAYER}.
+     *
+     * @return The UUID of the player.
+     * @throws IllegalStateException If the skin type is not {@link SkinType#PLAYER}.
+     */
+    public UUID getPlayerUniqueId() {
+        if (skinType != SkinType.PLAYER) {
+            throw new IllegalStateException("This skin identifier is not for a player skin.");
+        }
+
+        return UUID.fromString(identifier);
     }
 }

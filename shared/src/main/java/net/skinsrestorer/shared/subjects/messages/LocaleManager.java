@@ -34,7 +34,7 @@ public class LocaleManager {
     public void verifyValid() {
         for (Message message : Message.values()) {
             if (!messages.containsKey(message)) {
-                throw new IllegalStateException(String.format("Message %s not found", message.name()));
+                throw new IllegalStateException("Message %s not found".formatted(message.name()));
             }
         }
 
@@ -42,7 +42,7 @@ public class LocaleManager {
             Map<Locale, String> localeMap = messages.get(message);
 
             if (!localeMap.containsKey(BASE_LOCALE)) {
-                throw new IllegalStateException(String.format("Message %s does not have a default translation", message.name()));
+                throw new IllegalStateException("Message %s does not have a default translation".formatted(message.name()));
             }
         }
     }
@@ -51,8 +51,8 @@ public class LocaleManager {
         Map<Locale, String> localeMap = messages.get(key);
 
         // First try language_country, then language and finally default
-        return Optional.ofNullable(localeMap.get(new Locale(locale.getLanguage(), locale.getCountry())))
-                .orElseGet(() -> Optional.ofNullable(localeMap.get(new Locale(locale.getLanguage())))
+        return Optional.ofNullable(localeMap.get(Locale.of(locale.getLanguage(), locale.getCountry())))
+                .orElseGet(() -> Optional.ofNullable(localeMap.get(Locale.of(locale.getLanguage())))
                         .orElse(localeMap.get(BASE_LOCALE)));
     }
 }

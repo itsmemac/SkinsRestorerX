@@ -20,11 +20,11 @@ package net.skinsrestorer.shared.subjects;
 import ch.jalu.configme.SettingsManager;
 import lombok.NonNull;
 import lombok.experimental.SuperBuilder;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import net.skinsrestorer.shadow.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.skinsrestorer.shared.config.MessageConfig;
+import net.skinsrestorer.shared.subjects.messages.ComponentString;
 import net.skinsrestorer.shared.subjects.messages.Message;
 import net.skinsrestorer.shared.subjects.messages.SkinsRestorerLocale;
-import net.skinsrestorer.shared.utils.ComponentString;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -36,7 +36,7 @@ public abstract class AbstractSRCommandSender implements SRCommandSender {
 
     @Override
     public Locale getLocale() {
-        return settings.getProperty(MessageConfig.LOCALE);
+        return settings.getProperty(MessageConfig.CONSOLE_LOCALE);
     }
 
     @Override

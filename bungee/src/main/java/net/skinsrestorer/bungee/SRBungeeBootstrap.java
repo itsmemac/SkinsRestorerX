@@ -18,12 +18,13 @@
 package net.skinsrestorer.bungee;
 
 import lombok.Getter;
-import net.kyori.adventure.platform.bungeecord.BungeeAudiences;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.skinsrestorer.shared.log.JavaLoggerImpl;
 import net.skinsrestorer.shared.plugin.SRBootstrapper;
 import net.skinsrestorer.shared.plugin.SRProxyPlugin;
+
+import java.util.List;
 
 @Getter
 @SuppressWarnings("unused")
@@ -35,11 +36,10 @@ public class SRBungeeBootstrap extends Plugin {
         ProxyServer proxy = getProxy();
         SRBootstrapper.startPlugin(
                 runnable -> this.shutdownHook = runnable,
-                injector -> {
-                    injector.register(Plugin.class, this);
-                    injector.register(ProxyServer.class, proxy);
-                    injector.register(BungeeAudiences.class, BungeeAudiences.create(this));
-                },
+                List.of(
+                        new SRBootstrapper.PlatformClass<>(Plugin.class, this),
+                        new SRBootstrapper.PlatformClass<>(ProxyServer.class, proxy)
+                ),
                 new JavaLoggerImpl(proxy.getLogger()::info, proxy.getLogger()),
                 true,
                 SRBungeeAdapter.class,

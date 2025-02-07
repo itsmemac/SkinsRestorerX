@@ -34,9 +34,12 @@ public enum PermissionGroup {
             PermissionRegistry.SKIN_SET,
             PermissionRegistry.SKIN_SET_URL,
             PermissionRegistry.SKIN_CLEAR,
+            PermissionRegistry.SKIN_UNDO,
+            PermissionRegistry.SKIN_FAVOURITE,
             PermissionRegistry.SKIN_RANDOM,
             PermissionRegistry.SKIN_UPDATE,
             PermissionRegistry.SKIN_SEARCH,
+            PermissionRegistry.SKIN_EDIT,
             PermissionRegistry.SKINS
     ),
     ADMIN(
@@ -47,7 +50,9 @@ public enum PermissionGroup {
             PermissionRegistry.SR,
             PermissionRegistry.SKIN_SET_OTHER,
             PermissionRegistry.SKIN_CLEAR_OTHER,
-            PermissionRegistry.SKIN_RANDOM,
+            PermissionRegistry.SKIN_UNDO_OTHER,
+            PermissionRegistry.SKIN_FAVOURITE_OTHER,
+            PermissionRegistry.SKIN_RANDOM_OTHER,
             PermissionRegistry.SKIN_UPDATE_OTHER,
             PermissionRegistry.SR_STATUS,
             PermissionRegistry.SR_DROP,
@@ -82,7 +87,7 @@ public enum PermissionGroup {
     public static Collection<PermissionGroup> getGrantedBy(Permission permission) {
         Set<PermissionGroup> groups = new HashSet<>();
 
-        for (PermissionGroup group : values()) {
+        for (PermissionGroup group : VALUES) {
             if (group.hasPermission(permission)) {
                 groups.add(group);
             }
@@ -93,7 +98,7 @@ public enum PermissionGroup {
 
     public boolean hasPermission(Permission permission) {
         for (PermissionRegistry registry : permissions) {
-            if (registry.getPermission() == permission) {
+            if (registry.getPermission().equals(permission)) {
                 return true;
             }
         }

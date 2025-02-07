@@ -18,39 +18,36 @@
 package net.skinsrestorer.velocity;
 
 import ch.jalu.injector.Injector;
-import com.velocitypowered.api.command.CommandMeta;
-import com.velocitypowered.api.command.CommandSource;
-import com.velocitypowered.api.command.RawCommand;
 import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
-import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.util.GameProfile;
 import net.skinsrestorer.api.property.SkinProperty;
-import net.skinsrestorer.shared.commands.library.CommandUtils;
-import net.skinsrestorer.shared.commands.library.SRRegisterPayload;
 import net.skinsrestorer.shared.info.Platform;
 import net.skinsrestorer.shared.info.PluginInfo;
 import net.skinsrestorer.shared.plugin.SRProxyAdapter;
 import net.skinsrestorer.shared.subjects.SRCommandSender;
 import net.skinsrestorer.shared.subjects.SRPlayer;
-import net.skinsrestorer.shared.subjects.SRProxyPlayer;
 import net.skinsrestorer.velocity.listener.ForceAliveListener;
 import net.skinsrestorer.velocity.wrapper.WrapperVelocity;
 import org.bstats.velocity.Metrics;
+import org.incendo.cloud.CommandManager;
+import org.incendo.cloud.SenderMapper;
+import org.incendo.cloud.execution.ExecutionCoordinator;
+import org.incendo.cloud.velocity.VelocityCommandManager;
 
 import javax.inject.Inject;
 import java.io.InputStream;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public record SRVelocityAdapter(Injector injector, SRVelocityBootstrap pluginInstance,
-                                ProxyServer proxy) implements SRProxyAdapter<PluginContainer, CommandSource> {
+                                ProxyServer proxy) implements SRProxyAdapter {
     @Inject
     public SRVelocityAdapter {
     }
@@ -63,13 +60,22 @@ public record SRVelocityAdapter(Injector injector, SRVelocityBootstrap pluginIns
     }
 
     @Override
-    public boolean isPluginEnabled(String pluginName) {
-        return proxy.getPluginManager().getPlugin(pluginName).isPresent();
+    public InputStream getResource(String resource) {
+        return getClass().getClassLoader().getResourceAsStream(resource);
     }
 
     @Override
-    public InputStream getResource(String resource) {
-        return getClass().getClassLoader().getResourceAsStream(resource);
+    public CommandManager<SRCommandSender> createCommandManager() {
+        WrapperVelocity wrapper = injector.getSingleton(WrapperVelocity.class);
+        return new VelocityCommandManager<>(
+                proxy.getPluginManager().fromInstance(pluginInstance).orElseThrow(),
+                proxy,
+                ExecutionCoordinator.asyncCoordinator(),
+                SenderMapper.create(
+                        wrapper::commandSender,
+                        wrapper::unwrap
+                )
+        );
     }
 
     @Override
@@ -83,7 +89,7 @@ public record SRVelocityAdapter(Injector injector, SRVelocityBootstrap pluginIns
     }
 
     @Override
-    public void extendLifeTime(PluginContainer plugin, Object object) {
+    public void extendLifeTime(Object plugin, Object object) {
         proxy.getEventManager().register(plugin, ProxyShutdownEvent.class, PostOrder.LAST, new ForceAliveListener(object));
     }
 
@@ -118,65 +124,23 @@ public record SRVelocityAdapter(Injector injector, SRVelocityBootstrap pluginIns
                 p.getInstance().isPresent(),
                 p.getDescription().getName().orElseGet(() -> p.getDescription().getId()),
                 p.getDescription().getVersion().orElse("Unknown"),
-                "N/A",
+                p.getInstance().map(i -> i.getClass().getCanonicalName()).orElse("N/A"),
                 p.getDescription().getAuthors().toArray(new String[0])
         )).collect(Collectors.toList());
     }
 
     @Override
     public Optional<SkinProperty> getSkinProperty(SRPlayer player) {
-        List<GameProfile.Property> prop = player.getAs(Player.class).getGameProfileProperties();
-
-        return prop.stream().filter(p -> p.getName().equals(SkinProperty.TEXTURES_NAME))
-                .map(p -> SkinProperty.of(p.getValue(), p.getSignature())).findFirst();
+        return injector.getSingleton(SkinApplierVelocity.class).getSkinProperty(player.getAs(Player.class));
     }
 
     @Override
-    public Collection<SRPlayer> getOnlinePlayers() {
-        WrapperVelocity wrapper = injector.getSingleton(WrapperVelocity.class);
-        return proxy.getAllPlayers().stream().map(wrapper::player).collect(Collectors.toList());
+    public Collection<SRPlayer> getOnlinePlayers(SRCommandSender sender) {
+        return proxy.getAllPlayers().stream().map(injector.getSingleton(WrapperVelocity.class)::player).collect(Collectors.toList());
     }
 
     @Override
-    public SRCommandSender convertPlatformSender(CommandSource sender) {
-        return injector.getSingleton(WrapperVelocity.class).commandSender(sender);
-    }
-
-    @Override
-    public Class<CommandSource> getPlatformSenderClass() {
-        return CommandSource.class;
-    }
-
-    @Override
-    public Optional<SRProxyPlayer> getPlayer(String name) {
-        return proxy.getPlayer(name).map(injector.getSingleton(WrapperVelocity.class)::player);
-    }
-
-    @Override
-    public void registerCommand(SRRegisterPayload<CommandSource> payload) {
-        CommandMeta meta = proxy.getCommandManager()
-                .metaBuilder(payload.meta().rootName())
-                .plugin(pluginInstance)
-                .aliases(payload.meta().aliases()).build();
-        WrapperVelocity wrapper = injector.getSingleton(WrapperVelocity.class);
-
-        proxy.getCommandManager().register(meta, new RawCommand() {
-            @Override
-            public void execute(Invocation invocation) {
-                payload.executor().execute(wrapper.commandSender(invocation.source()),
-                        CommandUtils.joinCommand(invocation.alias(), invocation.arguments(), false));
-            }
-
-            @Override
-            public CompletableFuture<List<String>> suggestAsync(Invocation invocation) {
-                return payload.executor().tabComplete(wrapper.commandSender(invocation.source()),
-                        CommandUtils.joinCommand(invocation.alias(), invocation.arguments(), true));
-            }
-
-            @Override
-            public boolean hasPermission(Invocation invocation) {
-                return payload.executor().hasPermission(wrapper.commandSender(invocation.source()));
-            }
-        });
+    public Optional<SRPlayer> getPlayer(SRCommandSender sender, UUID uniqueId) {
+        return proxy.getPlayer(uniqueId).map(injector.getSingleton(WrapperVelocity.class)::player);
     }
 }

@@ -44,6 +44,7 @@ import java.util.Optional;
 public class UpdateCheckerGitHub {
     private static final URI RELEASES_URL_LATEST = URI.create("https://api.github.com/repos/SkinsRestorer/SkinsRestorer/releases/latest");
     private static final String JAR_ASSET_NAME = "SkinsRestorer.jar";
+    private static final String VERIFICATION_ASSET_NAME = "verification-hash.txt";
     private static final String LOG_ROW = "§a----------------------------------------------";
     private final SRLogger logger;
     private final SRPlugin plugin;
@@ -80,6 +81,11 @@ public class UpdateCheckerGitHub {
                     .map(GitHubAssetInfo::getBrowserDownloadUrl)
                     .findFirst();
 
+            Optional<String> verificationAssetUrl = releaseInfo.getAssets().stream()
+                    .filter(asset -> asset.getName().equals(VERIFICATION_ASSET_NAME))
+                    .map(GitHubAssetInfo::getBrowserDownloadUrl)
+                    .findFirst();
+
             if (jarAssetUrl.isEmpty()) {
                 throw new DataRequestExceptionShared("No jar asset found in release");
             }
@@ -94,7 +100,7 @@ public class UpdateCheckerGitHub {
 
                 String downloadUrl = jarAssetUrl.get();
                 printUpdateAvailable(cause, releaseInfo.getTagName(), downloadUrl, downloader != null);
-                if (downloader != null && downloader.downloadUpdate(downloadUrl)) {
+                if (downloader != null && downloader.downloadUpdate(downloadUrl, verificationAssetUrl.orElse(null))) {
                     updateDownloaded = true;
                 }
             } else {
@@ -112,8 +118,8 @@ public class UpdateCheckerGitHub {
 
     public void printUpToDate(UpdateCause cause) {
         printHeader(cause);
-        logger.info("§b    Version: §a" + BuildData.VERSION);
-        logger.info("§b    Commit: §a" + BuildData.COMMIT_SHORT);
+        logger.info("§b    Version: §a%s".formatted(BuildData.VERSION));
+        logger.info("§b    Commit: §a%s".formatted(BuildData.COMMIT_SHORT));
         if (cause == UpdateCause.NO_NETWORK) {
             logger.info("§c    No network connection available!");
         } else {
@@ -124,13 +130,13 @@ public class UpdateCheckerGitHub {
 
     public void printUpdateAvailable(UpdateCause cause, String newVersion, String downloadUrl, boolean updateDownloader) {
         printHeader(cause);
-        logger.info("§b    Version: §c" + BuildData.VERSION);
-        logger.info("§b    Commit: §c" + BuildData.COMMIT_SHORT);
+        logger.info("§b    Version: §c%s".formatted(BuildData.VERSION));
+        logger.info("§b    Commit: §c%s".formatted(BuildData.COMMIT_SHORT));
         if (updateDownloader) {
-            logger.info("§b    A new version (§a" + newVersion + "§b) is available! Downloading update...");
+            logger.info("§b    A new version (§a%s§b) is available! Downloading update...".formatted(newVersion));
         } else {
-            logger.info("§b    A new version (§a" + newVersion + "§b) is available!");
-            logger.info("§e    " + downloadUrl);
+            logger.info("§b    A new version (§a%s§b) is available!".formatted(newVersion));
+            logger.info("§e    %s".formatted(downloadUrl));
         }
         printFooter();
     }
@@ -160,6 +166,8 @@ public class UpdateCheckerGitHub {
 
     private void printFooter() {
         logger.info(LOG_ROW);
+        logger.info("§9Do you have issues? Read our troubleshooting guide: §ehttps://skinsrestorer.net/docs/troubleshooting");
+        logger.info("§9Want to support SkinsRestorer? Consider donating: §ehttps://skinsrestorer.net/donate");
     }
 
     public boolean isVersionNewer(String currentVersion, String newVersion) {

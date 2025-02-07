@@ -21,11 +21,13 @@ import ch.jalu.configme.Comment;
 import ch.jalu.configme.SettingsHolder;
 import ch.jalu.configme.configurationdata.CommentsConfiguration;
 import ch.jalu.configme.properties.Property;
+import net.skinsrestorer.shared.gui.SharedGUI;
 
 import java.util.List;
 
 import static ch.jalu.configme.properties.PropertyInitializer.newListProperty;
 import static ch.jalu.configme.properties.PropertyInitializer.newProperty;
+import static net.skinsrestorer.shared.config.ConfigHelpers.newCappedProperty;
 
 public class CommandConfig implements SettingsHolder {
 
@@ -42,9 +44,9 @@ public class CommandConfig implements SettingsHolder {
             "SkinErrorCooldown is used when an error or invalid url occurs.",
             "Can be bypassed with 'skinsrestorer.bypasscooldown'."
     })
-    public static final Property<Integer> SKIN_CHANGE_COOLDOWN = newProperty("commands.skinChangeCooldown", 30);
+    public static final Property<Integer> SKIN_CHANGE_COOLDOWN = newCappedProperty("commands.skinChangeCooldown", 30, 0, Integer.MAX_VALUE);
 
-    public static final Property<Integer> SKIN_ERROR_COOLDOWN = newProperty("commands.skinErrorCooldown", 5);
+    public static final Property<Integer> SKIN_ERROR_COOLDOWN = newCappedProperty("commands.skinErrorCooldown", 5, 0, Integer.MAX_VALUE);
     public static final Property<Boolean> RESTRICT_SKIN_URLS_ENABLED = newProperty("commands.restrictSkinUrls.enabled", false);
     @SuppressWarnings("HttpUrlsUsage")
     public static final Property<List<String>> RESTRICT_SKIN_URLS_LIST = newListProperty("commands.restrictSkinUrls.list",
@@ -59,20 +61,35 @@ public class CommandConfig implements SettingsHolder {
     );
     public static final Property<Boolean> DISABLED_SKINS_ENABLED = newProperty("commands.disabledSkins.enabled", false);
     public static final Property<List<String>> DISABLED_SKINS = newListProperty("commands.disabledSkins.list", "steve", "owner");
+    public static final String CONSENT_MESSAGE = "I will follow the rules";
+    @Comment({
+            "To enable per skin permissions you must agree to these rules:",
+            "- Do not monetize players being able to use their own skin",
+            "- Do not force players to steve skins and make them pay to use their own skin",
+            "- You can charge them for custom skins, but not their own skin",
+            "If you agree, set this to: '" + CONSENT_MESSAGE + "'"
+    })
+    public static final Property<String> PER_SKIN_PERMISSIONS_CONSENT = newProperty("commands.perSkinPermissionsConsent", "");
     @Comment({
             "Allows the usage of per-skin permission.",
             "Example: skinsrestorer.skin.xknat OR skinsrestorer.skin.Pistonmaster",
-            "with \"skinsrestorer.ownskin\" players can run /skin set %playerusername%.",
-            "[!] Only enable if you have set up permissions properly and know what you are doing."
+            "with \"skinsrestorer.ownskin\" players can run /skin set <their own name>.",
+            "[!] Only enable if you have set up permissions properly and know what you are doing.",
+            "[!] This option only works if 'commands.perSkinPermissionsConsent' is consented to."
     })
     public static final Property<Boolean> PER_SKIN_PERMISSIONS = newProperty("commands.perSkinPermissions", false);
     @Comment({
-            "Removes < > and [ ] encasing from command arguments.",
-            "Example: /skin set <skin> will become /skin set skin if this is enabled.",
-            "This is useful to prevent players from incorrectly using the command, as those brackets are not supposed to be there.",
-            "This will also send a message to the player that they incorrectly use the command, but the command will still run fixed arguments."
+            "How many commands to store in the player's command history.",
+            "This is used for the /skin undo command.",
+            "Use 0 to disable storing command history."
     })
-    public static final Property<Boolean> REMOVE_BRACKETS = newProperty("commands.removeBrackets", true);
+    public static final Property<Integer> MAX_HISTORY_LENGTH = newCappedProperty("commands.maxHistoryLength", SharedGUI.HEAD_COUNT_PER_PAGE, 0, Integer.MAX_VALUE);
+    @Comment({
+            "How many favourites a player may have.",
+            "This is used for the /skin favourite command.",
+            "Use 0 to disable storing favourites."
+    })
+    public static final Property<Integer> MAX_FAVOURITE_LENGTH = newCappedProperty("commands.maxFavouriteLength", SharedGUI.HEAD_COUNT_PER_PAGE * 5, 0, Integer.MAX_VALUE);
     @Comment({
             "Override the automatically generated translated help message with a custom one.",
             "This is useful if you want to have a custom help message for your server.",

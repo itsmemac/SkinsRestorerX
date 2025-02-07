@@ -23,7 +23,6 @@ import net.skinsrestorer.bukkit.utils.BukkitReflection;
 import net.skinsrestorer.bukkit.utils.HandleReflection;
 import net.skinsrestorer.bukkit.utils.OPRefreshUtil;
 import net.skinsrestorer.shared.log.SRLogger;
-import net.skinsrestorer.shared.utils.FluentList;
 import net.skinsrestorer.shared.utils.ReflectionUtil;
 import net.skinsrestorer.shared.utils.SRHelpers;
 import org.bukkit.Location;
@@ -114,8 +113,8 @@ public final class SpigotSkinRefresher implements SkinRefresher {
             Object removePlayer;
             Object addPlayer;
             try {
-                removePlayer = ReflectionUtil.invokeConstructor(playOutPlayerInfoClass, removePlayerEnum, FluentList.of(entityPlayer));
-                addPlayer = ReflectionUtil.invokeConstructor(playOutPlayerInfoClass, addPlayerEnum, FluentList.of(entityPlayer));
+                removePlayer = ReflectionUtil.invokeConstructor(playOutPlayerInfoClass, removePlayerEnum, List.of(entityPlayer));
+                addPlayer = ReflectionUtil.invokeConstructor(playOutPlayerInfoClass, addPlayerEnum, List.of(entityPlayer));
             } catch (ReflectiveOperationException e) {
                 try {
                     int ping = ReflectionUtil.getObject(entityPlayer, "ping");
@@ -179,7 +178,7 @@ public final class SpigotSkinRefresher implements SkinRefresher {
                         // Minecraft 1.15 changes
                         // PacketPlayOutRespawn now needs the world seed
 
-                        long seedEncrypted = SRHelpers.hashSha256String(String.valueOf(player.getWorld().getSeed()));
+                        long seedEncrypted = SRHelpers.hashSha256ToLong(String.valueOf(player.getWorld().getSeed()));
                         try {
                             respawn = ReflectionUtil.invokeConstructor(playOutRespawnClass, dimensionManager, seedEncrypted, worldType, enumGamemode);
                         } catch (ReflectiveOperationException ignored5) {
@@ -236,7 +235,7 @@ public final class SpigotSkinRefresher implements SkinRefresher {
 
                 return new ViaPacketData(
                         player,
-                        SRHelpers.hashSha256String(String.valueOf(player.getWorld().getSeed())),
+                        SRHelpers.hashSha256ToLong(String.valueOf(player.getWorld().getSeed())),
                         ((Integer) gamemodeId).shortValue(),
                         flat
                 );
@@ -260,7 +259,7 @@ public final class SpigotSkinRefresher implements SkinRefresher {
             // TODO: Send proper permission level instead of this workaround
             OPRefreshUtil.refreshOP(player, adapter);
         } catch (ReflectiveOperationException e) {
-            logger.severe("Failed to refresh skin for player " + player.getName(), e);
+            logger.severe("Failed to refresh skin for player %s".formatted(player.getName()), e);
         }
     }
 
@@ -287,10 +286,10 @@ public final class SpigotSkinRefresher implements SkinRefresher {
                     }
                 }
             } catch (ReflectiveOperationException e2) {
-                logger.severe("Failed to get DimensionManager from " + worldObject.getClass().getSimpleName(), e2);
+                logger.severe("Failed to get DimensionManager from %s".formatted(worldObject.getClass().getSimpleName()), e2);
             }
         }
 
-        throw new ReflectiveOperationException("Could not get DimensionManager from " + worldObject.getClass().getSimpleName());
+        throw new ReflectiveOperationException("Could not get DimensionManager from %s".formatted(worldObject.getClass().getSimpleName()));
     }
 }

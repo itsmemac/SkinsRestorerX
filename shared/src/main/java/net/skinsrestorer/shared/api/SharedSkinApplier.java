@@ -25,9 +25,10 @@ import net.skinsrestorer.api.property.SkinIdentifier;
 import net.skinsrestorer.api.property.SkinProperty;
 import net.skinsrestorer.api.storage.PlayerStorage;
 import net.skinsrestorer.api.storage.SkinStorage;
+import net.skinsrestorer.shared.commands.SoundProvider;
 import net.skinsrestorer.shared.subjects.SRPlayer;
-import net.skinsrestorer.shared.utils.SRConstants;
-import net.skinsrestorer.shared.utils.SoundProvider;
+import net.skinsrestorer.shared.subjects.SRSubjectWrapper;
+import net.skinsrestorer.shared.utils.SRHelpers;
 
 import java.util.Optional;
 
@@ -35,7 +36,7 @@ import java.util.Optional;
 public class SharedSkinApplier<P> implements SkinApplier<P> {
     private final Class<P> playerClass;
     private final SkinApplierAccess<P> access;
-    private final PlatformWrapper<P> wrapper;
+    private final SRSubjectWrapper<?, P, ?> wrapper;
     private final PlayerStorage playerStorage;
     private final SkinStorage skinStorage;
     private final Injector injector;
@@ -46,9 +47,9 @@ public class SharedSkinApplier<P> implements SkinApplier<P> {
 
     @Override
     public void applySkin(P player) throws DataRequestException {
-        SRPlayer srPlayer = wrapper.convert(player);
+        SRPlayer srPlayer = wrapper.player(player);
         Optional<SkinProperty> playerSkin = playerStorage.getSkinForPlayer(srPlayer.getUniqueId(), srPlayer.getName());
-        applySkin(player, playerSkin.orElse(SRConstants.EMPTY_SKIN));
+        applySkin(player, playerSkin.orElse(SRHelpers.EMPTY_SKIN));
     }
 
     @Override
@@ -60,8 +61,8 @@ public class SharedSkinApplier<P> implements SkinApplier<P> {
     public void applySkin(P player, SkinProperty property) {
         access.applySkin(player, property);
 
-        SRPlayer srPlayer = wrapper.convert(player);
+        SRPlayer srPlayer = wrapper.player(player);
         Optional.ofNullable(injector.getIfAvailable(SoundProvider.class))
-                .ifPresent(soundProvider -> soundProvider.accept(srPlayer));
+                .ifPresent(soundProvider -> soundProvider.accept(injector, srPlayer));
     }
 }
