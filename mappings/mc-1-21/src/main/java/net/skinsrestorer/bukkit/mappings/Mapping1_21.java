@@ -50,7 +50,7 @@ public class Mapping1_21 implements IMapping {
                 ClientboundRespawnPacket.KEEP_ALL_DATA
         );
 
-        sendPacket(entityPlayer, new ClientboundPlayerInfoRemovePacket(List.of(player.getUniqueId())));
+        sendPacket(entityPlayer, new ClientboundPlayerInfoRemovePacket(List.of(entityPlayer.getUUID())));
         sendPacket(entityPlayer, ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(entityPlayer)));
 
         if (viaFunction.test(() -> new ViaPacketData(player, spawnInfo.seed(), spawnInfo.gameType().getId(), spawnInfo.isFlat()))) {
@@ -78,7 +78,8 @@ public class Mapping1_21 implements IMapping {
     @Override
     public Set<String> getSupportedVersions() {
         return Set.of(
-                "229d7afc75b70a6c388337687ac4da1f" // 1.21
+                "229d7afc75b70a6c388337687ac4da1f", // 1.21
+                "7092ff1ff9352ad7e2260dc150e6a3ec" // 1.21.1
         );
     }
 }

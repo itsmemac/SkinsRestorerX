@@ -70,14 +70,14 @@ public class ReflectionUtil {
             }
         }
 
-        throw new ReflectiveOperationException(String.format("Enum constant not found %s", constant));
+        throw new ReflectiveOperationException("Enum constant not found %s".formatted(constant));
     }
 
     public static Enum<?> getEnum(Class<?> clazz, int ordinal) throws ReflectiveOperationException {
         try {
             return (Enum<?>) clazz.getEnumConstants()[ordinal];
         } catch (ArrayIndexOutOfBoundsException e) {
-            throw new ReflectiveOperationException(String.format("Enum constant not found %s", ordinal));
+            throw new ReflectiveOperationException("Enum constant not found %s".formatted(ordinal));
         }
     }
 
@@ -96,7 +96,7 @@ public class ReflectionUtil {
                 return subClass;
         }
 
-        throw new ClassNotFoundException("Sub class " + className + " of " + clazz.getSimpleName() + " not found!");
+        throw new ClassNotFoundException("Sub class %s of %s not found!".formatted(className, clazz.getSimpleName()));
     }
 
     public static Field getField(Class<?> clazz, String fieldName) throws ReflectiveOperationException {
@@ -135,7 +135,7 @@ public class ReflectionUtil {
     }
 
     private static Object getFieldByType(Object obj, Class<?> superClass, String typeName) throws ReflectiveOperationException {
-        return getFieldByTypeList(obj, superClass, typeName).get(0);
+        return getFieldByTypeList(obj, superClass, typeName).getFirst();
     }
 
     public static List<Object> getFieldByTypeList(Object obj, String typeName) throws ReflectiveOperationException {
@@ -158,7 +158,7 @@ public class ReflectionUtil {
         }
 
         if (fields.isEmpty() && obj.getClass() == superClass) {
-            throw new ReflectiveOperationException("Could not find field of type " + typeName + " in " + obj.getClass().getSimpleName());
+            throw new ReflectiveOperationException("Could not find field of type %s in %s".formatted(typeName, obj.getClass().getSimpleName()));
         } else {
             return fields;
         }
@@ -203,7 +203,7 @@ public class ReflectionUtil {
                 .map(s -> s == null ? "null" : s.getClass().getSimpleName())
                 .collect(Collectors.joining(", "));
 
-        throw new ReflectiveOperationException(String.format("Could not find constructor with args %s in %s", argsString, clazz.getSimpleName()));
+        throw new ReflectiveOperationException("Could not find constructor with args %s in %s".formatted(argsString, clazz.getSimpleName()));
     }
 
     private static boolean isAssignable(Class<?> clazz, Object obj) {

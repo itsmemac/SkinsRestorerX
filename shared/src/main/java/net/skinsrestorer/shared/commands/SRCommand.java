@@ -20,8 +20,8 @@ package net.skinsrestorer.shared.commands;
 import ch.jalu.configme.SettingsManager;
 import ch.jalu.injector.Injector;
 import lombok.RequiredArgsConstructor;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.skinsrestorer.shadow.kyori.adventure.text.Component;
+import net.skinsrestorer.shadow.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.skinsrestorer.api.PropertyUtils;
 import net.skinsrestorer.api.SkinsRestorer;
 import net.skinsrestorer.api.connections.MineSkinAPI;
@@ -33,8 +33,12 @@ import net.skinsrestorer.api.property.*;
 import net.skinsrestorer.api.storage.CacheStorage;
 import net.skinsrestorer.api.storage.PlayerStorage;
 import net.skinsrestorer.builddata.BuildData;
-import net.skinsrestorer.shared.commands.library.CommandManager;
-import net.skinsrestorer.shared.commands.library.annotations.*;
+import net.skinsrestorer.shared.commands.library.PlayerSelector;
+import net.skinsrestorer.shared.commands.library.SRCommandManager;
+import net.skinsrestorer.shared.commands.library.annotations.CommandDescription;
+import net.skinsrestorer.shared.commands.library.annotations.CommandPermission;
+import net.skinsrestorer.shared.commands.library.annotations.ConsoleOnly;
+import net.skinsrestorer.shared.commands.library.annotations.RootDescription;
 import net.skinsrestorer.shared.config.DevConfig;
 import net.skinsrestorer.shared.config.StorageConfig;
 import net.skinsrestorer.shared.connections.DumpService;
@@ -54,34 +58,43 @@ import net.skinsrestorer.shared.storage.model.skin.URLIndexData;
 import net.skinsrestorer.shared.storage.model.skin.URLSkinData;
 import net.skinsrestorer.shared.subjects.SRCommandSender;
 import net.skinsrestorer.shared.subjects.SRPlayer;
+import net.skinsrestorer.shared.subjects.messages.ComponentHelper;
+import net.skinsrestorer.shared.subjects.messages.ComponentString;
 import net.skinsrestorer.shared.subjects.messages.Message;
 import net.skinsrestorer.shared.subjects.messages.SkinsRestorerLocale;
 import net.skinsrestorer.shared.subjects.permissions.Permission;
 import net.skinsrestorer.shared.subjects.permissions.PermissionGroup;
 import net.skinsrestorer.shared.subjects.permissions.PermissionRegistry;
-import net.skinsrestorer.shared.utils.ComponentHelper;
-import net.skinsrestorer.shared.utils.SRConstants;
+import net.skinsrestorer.shared.utils.ExpiringSet;
+import net.skinsrestorer.shared.utils.SRHelpers;
 import net.skinsrestorer.shared.utils.UUIDUtils;
 import net.skinsrestorer.shared.utils.ValidationUtil;
+import org.incendo.cloud.annotation.specifier.Greedy;
+import org.incendo.cloud.annotation.specifier.Quoted;
+import org.incendo.cloud.annotations.Argument;
+import org.incendo.cloud.annotations.Command;
+import org.incendo.cloud.annotations.suggestion.Suggestions;
+import org.incendo.cloud.context.CommandContext;
+import org.incendo.cloud.help.result.CommandEntry;
+import org.incendo.cloud.minecraft.extras.MinecraftHelp;
+import org.incendo.cloud.minecraft.extras.caption.ComponentCaptionFormatter;
 
 import javax.inject.Inject;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Command("sr|skinsrestorer")
+@RootDescription(Message.HELP_SR)
 @SuppressWarnings("unused")
-@CommandNames({"sr", "skinsrestorer"})
-@Description(Message.HELP_SR)
-@CommandPermission(PermissionRegistry.SR)
-@CommandConditions("allowed-server")
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public final class SRCommand {
+    private final ExpiringSet<UUID> quotesHelpCache = new ExpiringSet<>(5, TimeUnit.MINUTES);
     private final SRPlugin plugin;
-    private final SRPlatformAdapter<?, ?> adapter;
+    private final SRPlatformAdapter adapter;
     private final ServiceCheckerService serviceCheckerService;
     private final PlayerStorage playerStorage;
     private final CacheStorage cacheStorage;
@@ -95,16 +108,86 @@ public final class SRCommand {
     private final SkinApplier<Object> skinApplier;
     private final Injector injector;
     private final SkinsRestorerLocale locale;
-    private final CommandManager<SRCommandSender> commandManager;
+    private final SRCommandManager commandManager;
 
-    @RootCommand
-    private void onDefault(SRCommandSender sender) {
-        commandManager.getHelpMessage("sr", sender).forEach(sender::sendMessage);
+    @Command("")
+    @CommandPermission(PermissionRegistry.SR)
+    public void rootCommand(SRCommandSender sender) {
+        MinecraftHelp.<SRCommandSender>builder()
+                .commandManager(commandManager.getCommandManager())
+                .audienceProvider(ComponentHelper::commandSenderToAudience)
+                .commandPrefix("/sr help")
+                .messageProvider(MinecraftHelp.captionMessageProvider(
+                        commandManager.getCommandManager().captionRegistry(),
+                        ComponentCaptionFormatter.miniMessage()
+                ))
+                .descriptionDecorator((s, d) -> ComponentHelper.convertJsonToComponent(locale.getMessageRequired(s, Message.fromKey(d).orElseThrow())))
+                .commandFilter(c -> c.rootComponent().name().equals("sr") && !c.commandDescription().description().isEmpty())
+                .maxResultsPerPage(Integer.MAX_VALUE)
+                .build()
+                .queryCommands("", sender);
     }
 
-    @Subcommand("reload")
+    @Suggestions("help_queries_sr")
+    public List<String> suggestHelpQueries(CommandContext<SRCommandSender> ctx, String input) {
+        return this.commandManager.getCommandManager()
+                .createHelpHandler()
+                .queryRootIndex(ctx.sender())
+                .entries()
+                .stream()
+                .filter(e -> e.command().rootComponent().name().equals("sr"))
+                .map(CommandEntry::syntax)
+                .toList();
+    }
+
+    @Command("help [query]")
+    @CommandPermission(PermissionRegistry.SR)
+    @CommandDescription(Message.HELP_SR)
+    public void commandHelp(SRCommandSender sender, @Argument(suggestions = "help_queries_sr") @Greedy String query) {
+        MinecraftHelp.<SRCommandSender>builder()
+                .commandManager(commandManager.getCommandManager())
+                .audienceProvider(ComponentHelper::commandSenderToAudience)
+                .commandPrefix("/sr help")
+                .messageProvider(MinecraftHelp.captionMessageProvider(
+                        commandManager.getCommandManager().captionRegistry(),
+                        ComponentCaptionFormatter.miniMessage()
+                ))
+                .descriptionDecorator((s, d) -> ComponentHelper.convertJsonToComponent(locale.getMessageRequired(s, Message.fromKey(d).orElseThrow())))
+                .commandFilter(c -> c.rootComponent().name().equals("sr") && !c.commandDescription().description().isEmpty())
+                .build()
+                .queryCommands(query == null ? "" : query, sender);
+    }
+
+    @Suggestions("skin_input_quote")
+    public List<String> suggestSkinInputUrl(CommandContext<SRCommandSender> ctx, String input) {
+        if (input.isEmpty()) {
+            return List.of();
+        }
+
+        boolean startsWithQuote = input.startsWith("\"");
+        String withoutStartQuote = startsWithQuote ? input.substring(1) : input;
+        boolean endsWithQuote = withoutStartQuote.endsWith("\"");
+        String withoutEndQuote = endsWithQuote ? withoutStartQuote.substring(0, withoutStartQuote.length() - 1) : withoutStartQuote;
+
+        if (!startsWithQuote && !endsWithQuote && SRHelpers.isNotAllowedUnquotedString(withoutEndQuote)) {
+            if (ctx.sender() instanceof SRPlayer player && !quotesHelpCache.contains(player.getUniqueId())) {
+                ctx.sender().sendMessage(Message.INFO_USE_QUOTES);
+                quotesHelpCache.add(player.getUniqueId());
+            }
+
+            return List.of("\"%s\"".formatted(input));
+        } else if (startsWithQuote && !endsWithQuote) {
+            return List.of("%s\"".formatted(input));
+        } else if (!startsWithQuote && endsWithQuote) {
+            return List.of("\"%s".formatted(input));
+        } else {
+            return List.of(input);
+        }
+    }
+
+    @Command("reload")
     @CommandPermission(PermissionRegistry.SR_RELOAD)
-    @Description(Message.HELP_SR_RELOAD)
+    @CommandDescription(Message.HELP_SR_RELOAD)
     private void onReload(SRCommandSender sender) {
         plugin.loadConfig();
         try {
@@ -122,41 +205,30 @@ public final class SRCommand {
         sender.sendMessage(Message.SUCCESS_ADMIN_RELOAD);
     }
 
-    @Private
-    @Subcommand("docs-commands")
-    @CommandPermission(PermissionRegistry.SR)
-    private void onDocsCommands(SRCommandSender sender) {
-        commandManager.getHelpMessageNodeStart(commandManager.getDispatcher().getRoot(),
-                        (s, t) -> Optional.of(ComponentHelper.parseMiniMessageToJsonString("| `/<command>` | <description> | `<permission>` |", t)),
-                        List.of(), sender)
-                .stream().map(ComponentHelper::convertToJsonString).forEach(sender::sendMessage);
-    }
-
-    @Private
-    @Subcommand("docs-permissions")
+    @Command("docs permissions")
     @CommandPermission(PermissionRegistry.SR)
     private void onDocsPermissions(SRCommandSender sender) {
         for (PermissionRegistry permission : PermissionRegistry.values()) {
-            sender.sendMessage(ComponentHelper.convertToJsonString(Component.text("| `%s` | %s |".formatted(
+            sender.sendMessage(ComponentHelper.convertComponentToJson(Component.text("| `%s` | %s |".formatted(
                     permission.getPermission().getPermissionString(),
-                    ComponentHelper.convertToPlain(ComponentHelper.convertJsonToComponent(locale.getMessageRequired(sender, permission.getDescription())))
+                    ComponentHelper.convertComponentToPlain(ComponentHelper.convertJsonToComponent(locale.getMessageRequired(sender, permission.getDescription())))
             ))));
         }
 
         for (PermissionGroup group : PermissionGroup.VALUES) {
-            sender.sendMessage(ComponentHelper.convertToJsonString(Component.text("| `%s` / `%s` | %s | %s |".formatted(
+            sender.sendMessage(ComponentHelper.convertComponentToJson(Component.text("| `%s` / `%s` | %s | %s |".formatted(
                     group.getBasePermission().getPermissionString(),
                     group.getWildcard().getPermissionString(),
-                    ComponentHelper.convertToPlain(ComponentHelper.convertJsonToComponent(locale.getMessageRequired(sender, group.getDescription()))),
+                    ComponentHelper.convertComponentToPlain(ComponentHelper.convertJsonToComponent(locale.getMessageRequired(sender, group.getDescription()))),
                     Stream.concat(Arrays.stream(group.getParents()).map(PermissionGroup::getBasePermission), Arrays.stream(group.getPermissions()).map(PermissionRegistry::getPermission))
                             .map(Permission::getPermissionString).map("`%s`"::formatted).collect(Collectors.joining(", "))
             ))));
         }
     }
 
-    @Subcommand("status")
+    @Command("status")
     @CommandPermission(PermissionRegistry.SR_STATUS)
-    @Description(Message.HELP_SR_STATUS)
+    @CommandDescription(Message.HELP_SR_STATUS)
     private void onStatus(SRCommandSender sender) {
         sender.sendMessage(Message.ADMINCOMMAND_STATUS_CHECKING);
 
@@ -188,7 +260,6 @@ public final class SRCommand {
         } else {
             // No services are unavailable, but some APIs are not working
             sender.sendMessage(Message.ADMINCOMMAND_STATUS_DEGRADED);
-            sender.sendMessage(Message.ADMINCOMMAND_STATUS_FIREWALL);
         }
 
         sender.sendMessage(Message.DIVIDER);
@@ -204,54 +275,63 @@ public final class SRCommand {
         sender.sendMessage(Message.DIVIDER);
     }
 
-    @Subcommand({"drop", "remove"})
+    @Command("drop|remove player <target>")
     @CommandPermission(PermissionRegistry.SR_DROP)
-    @Description(Message.HELP_SR_DROP)
-    private void onDrop(SRCommandSender sender, PlayerOrSkin playerOrSkin, String target) {
-        switch (playerOrSkin) {
-            case PLAYER -> {
-                try {
-                    Optional<UUID> targetId = cacheStorage.getUUID(target, false);
+    @CommandDescription(Message.HELP_SR_DROP)
+    private void onDropPlayer(SRCommandSender sender, String target) {
+        try {
+            Optional<UUID> targetId = cacheStorage.getUUID(target, false);
 
-                    if (targetId.isEmpty()) {
-                        sender.sendMessage(Message.ADMINCOMMAND_DROP_PLAYER_NOT_FOUND, Placeholder.unparsed("player", target));
-                        return;
-                    }
-
-                    playerStorage.removeSkinIdOfPlayer(targetId.get());
-                } catch (DataRequestException e) {
-                    sender.sendMessage(Message.ADMINCOMMAND_DROP_UUID_ERROR);
-                    return;
-                }
+            if (targetId.isEmpty()) {
+                sender.sendMessage(Message.ADMINCOMMAND_DROP_PLAYER_NOT_FOUND, Placeholder.unparsed("player", target));
+                return;
             }
-            case SKIN -> {
-                Optional<InputDataResult> optional = skinStorage.findSkinData(target);
 
-                if (optional.isEmpty()) {
-                    sender.sendMessage(Message.ADMINCOMMAND_DROP_SKIN_NOT_FOUND, Placeholder.unparsed("skin", target));
-                    return;
-                }
-
-                InputDataResult result = optional.get();
-
-                skinStorage.removeSkinData(result.getIdentifier());
-            }
+            playerStorage.removeSkinIdOfPlayer(targetId.get());
+        } catch (DataRequestException e) {
+            sender.sendMessage(Message.ADMINCOMMAND_DROP_UUID_ERROR);
+            return;
         }
 
-        sender.sendMessage(Message.SUCCESS_ADMIN_DROP, Placeholder.unparsed("type", playerOrSkin.toString()), Placeholder.unparsed("target", target));
+        sender.sendMessage(Message.SUCCESS_ADMIN_DROP, Placeholder.unparsed("type", "player"), Placeholder.unparsed("target", target));
     }
 
-    @Subcommand({"info", "props", "lookup"})
-    @CommandPermission(PermissionRegistry.SR_INFO)
-    @Description(Message.HELP_SR_INFO)
-    private void onInfo(SRCommandSender sender, PlayerOrSkin playerOrSkin, String input) {
-        try {
-            sender.sendMessage(Message.ADMINCOMMAND_INFO_CHECKING);
-            var message = switch (playerOrSkin) {
-                case PLAYER -> getPlayerInfoMessage(input);
-                case SKIN -> getSkinInfoMessage(input);
-            };
+    @Command("drop|remove skin <target>")
+    @CommandPermission(PermissionRegistry.SR_DROP)
+    @CommandDescription(Message.HELP_SR_DROP)
+    private void onDropSkin(SRCommandSender sender, String target) {
+        Optional<InputDataResult> optional = skinStorage.findSkinData(target);
 
+        if (optional.isEmpty()) {
+            sender.sendMessage(Message.ADMINCOMMAND_DROP_SKIN_NOT_FOUND, Placeholder.unparsed("skin", target));
+            return;
+        }
+
+        InputDataResult result = optional.get();
+
+        skinStorage.removeSkinData(result.getIdentifier());
+
+        sender.sendMessage(Message.SUCCESS_ADMIN_DROP, Placeholder.unparsed("type", "skin"), Placeholder.unparsed("target", target));
+    }
+
+    @Command("info|props|lookup player <input>")
+    @CommandPermission(PermissionRegistry.SR_INFO)
+    @CommandDescription(Message.HELP_SR_INFO)
+    private void onInfoPlayer(SRCommandSender sender, String input) {
+        sender.sendMessage(Message.ADMINCOMMAND_INFO_CHECKING);
+        sender.sendMessage(Message.DIVIDER);
+        getPlayerInfoMessage(input).accept(sender);
+        sender.sendMessage(Message.DIVIDER);
+    }
+
+    @Command("info|props|lookup skin <input>")
+    @CommandPermission(PermissionRegistry.SR_INFO)
+    @CommandDescription(Message.HELP_SR_INFO)
+    private void onInfoSkin(SRCommandSender sender, String input) {
+        try {
+            Consumer<SRCommandSender> message = getSkinInfoMessage(input);
+
+            sender.sendMessage(Message.ADMINCOMMAND_INFO_CHECKING);
             sender.sendMessage(Message.DIVIDER);
             message.accept(sender);
             sender.sendMessage(Message.DIVIDER);
@@ -283,8 +363,7 @@ public final class SRCommand {
         MojangProfileTextureMeta skinMetadata = profile.getTextures().getSKIN().getMetadata();
 
         long timestamp = profile.getTimestamp();
-        String requestTime = new SimpleDateFormat(SRConstants.DATE_FORMAT, sender.getLocale())
-                .format(new Date(timestamp));
+        String requestTime = SRHelpers.formatEpochMillis(settings, timestamp, sender.getLocale());
 
         sender.sendMessage(Message.ADMINCOMMAND_INFO_GENERIC,
                 Placeholder.parsed("url", texturesUrl),
@@ -341,43 +420,48 @@ public final class SRCommand {
             return playerSkinData.<Consumer<SRCommandSender>>map(skinData -> sender -> {
                 sender.sendMessage(Message.ADMINCOMMAND_INFO_PLAYER_SKIN,
                         Placeholder.parsed("skin", input),
-                        Placeholder.parsed("timestamp", new SimpleDateFormat(SRConstants.DATE_FORMAT, sender.getLocale())
-                                .format(new Date(TimeUnit.SECONDS.toMillis(playerSkinData.get().getTimestamp())))),
-                        Placeholder.parsed("expires", new SimpleDateFormat(SRConstants.DATE_FORMAT, sender.getLocale())
-                                .format(new Date(TimeUnit.SECONDS.toMillis(playerSkinData.get().getTimestamp()
-                                        + TimeUnit.MINUTES.toSeconds(settings.getProperty(StorageConfig.SKIN_EXPIRES_AFTER)))))));
+                        Placeholder.parsed("timestamp", SRHelpers.formatEpochSeconds(settings, playerSkinData.get().getTimestamp(), sender.getLocale())),
+                        Placeholder.parsed("expires", SRHelpers.formatEpochSeconds(settings, playerSkinData.get().getTimestamp()
+                                + TimeUnit.MINUTES.toSeconds(settings.getProperty(StorageConfig.SKIN_EXPIRES_AFTER)), sender.getLocale())));
                 sendGenericSkinInfoMessage(sender, skinData.getProperty());
             }).orElseGet(() -> sender -> sender.sendMessage(Message.NO_SKIN_DATA));
         }
     }
 
-    @Subcommand("applyskin")
+    @Command("applyskin <selector>")
     @CommandPermission(PermissionRegistry.SR_APPLY_SKIN)
-    @Description(Message.HELP_SR_APPLY_SKIN)
-    private void onApplySkin(SRCommandSender sender, SRPlayer target) {
-        try {
-            skinApplier.applySkin(target.getAs(Object.class));
-            sender.sendMessage(Message.SUCCESS_ADMIN_APPLYSKIN);
-        } catch (DataRequestException e) {
-            ComponentHelper.sendException(e, sender, locale, logger);
+    @CommandDescription(Message.HELP_SR_APPLY_SKIN)
+    private void onApplySkin(SRCommandSender sender, PlayerSelector selector) {
+        for (UUID target : selector.resolve(sender)) {
+            Optional<SRPlayer> targetPlayer = adapter.getPlayer(sender, target);
+            if (targetPlayer.isEmpty()) {
+                continue;
+            }
+
+            try {
+                skinApplier.applySkin(targetPlayer.get().getAs(Object.class));
+                sender.sendMessage(Message.SUCCESS_ADMIN_APPLYSKIN, Placeholder.unparsed("player", targetPlayer.get().getName()));
+            } catch (DataRequestException e) {
+                ComponentHelper.sendException(e, sender, locale, logger);
+            }
         }
     }
 
-    @Subcommand("createcustom")
+    @Command("createcustom <skinName> <skinInput>")
     @CommandPermission(PermissionRegistry.SR_CREATE_CUSTOM)
-    @Description(Message.HELP_SR_CREATE_CUSTOM)
-    private void onCreateCustom(SRCommandSender sender, String skinName, String skinInput) {
+    @CommandDescription(Message.HELP_SR_CREATE_CUSTOM)
+    private void onCreateCustom(SRCommandSender sender, String skinName, @Argument(suggestions = "skin_input_quote") @Quoted String skinInput) {
         createCustom(sender, skinName, skinInput, null);
     }
 
-    @Subcommand("createcustom")
+    @Command("createcustom <skinName> <skinInput> <skinVariant>")
     @CommandPermission(PermissionRegistry.SR_CREATE_CUSTOM)
-    @Description(Message.HELP_SR_CREATE_CUSTOM)
-    private void onCreateCustom(SRCommandSender sender, String skinName, String skinInput, SkinVariant skinVariant) {
+    @CommandDescription(Message.HELP_SR_CREATE_CUSTOM)
+    private void onCreateCustom(SRCommandSender sender, String skinName, @Argument(suggestions = "skin_input_quote") @Quoted String skinInput, SkinVariant skinVariant) {
         createCustom(sender, skinName, skinInput, skinVariant);
     }
 
-    private void createCustom(SRCommandSender sender, String skinName, String skinInput, SkinVariant skinVariant) {
+    private void createCustom(SRCommandSender sender, String skinName, @Argument(suggestions = "skin_input_quote") @Quoted String skinInput, SkinVariant skinVariant) {
         try {
             Optional<InputDataResult> response = skinStorage.findOrCreateSkinData(skinInput, skinVariant);
             if (response.isEmpty()) {
@@ -392,46 +476,25 @@ public final class SRCommand {
         }
     }
 
-    @Subcommand("setskinall")
+    @Command("setcustomname <skinName> <displayName>")
     @CommandPermission(PermissionRegistry.SR_CREATE_CUSTOM)
-    @Description(Message.HELP_SR_SET_SKIN_ALL)
-    @CommandConditions("console-only")
-    private void onSetSkinAll(SRCommandSender sender, String skinName, SkinVariant skinVariant) {
-        Optional<InputDataResult> optional = skinStorage.findSkinData(skinName);
-
-        if (optional.isEmpty()) {
-            sender.sendMessage(Message.ADMINCOMMAND_SETSKINALL_NOT_FOUND);
-            return;
+    @CommandDescription(Message.HELP_SR_CREATE_CUSTOM)
+    private void onSetCustomName(SRCommandSender sender, String skinName, @Greedy String displayName) {
+        try {
+            ComponentString componentString = ComponentHelper.parseMiniMessageToJsonString(displayName);
+            skinStorage.setCustomSkinDisplayName(skinName, componentString);
+            sender.sendMessage(Message.SUCCESS_ADMIN_SETCUSTOMNAME,
+                    Placeholder.unparsed("skin", skinName),
+                    Placeholder.component("display_name", ComponentHelper.convertJsonToComponent(componentString)));
+        } catch (StorageAdapter.StorageException e) {
+            ComponentHelper.sendException(e, sender, locale, logger);
         }
-
-        for (SRPlayer player : adapter.getOnlinePlayers()) {
-            playerStorage.setSkinIdOfPlayer(player.getUniqueId(), optional.get().getIdentifier());
-            skinApplier.applySkin(player.getAs(Object.class), optional.get().getProperty());
-        }
-
-        sender.sendMessage(Message.ADMINCOMMAND_SETSKINALL_SUCCESS, Placeholder.unparsed("skin", skinName));
     }
 
-    @Subcommand("applyskinall")
-    @CommandPermission(PermissionRegistry.SR_APPLY_SKIN_ALL)
-    @Description(Message.HELP_SR_APPLY_SKIN_ALL)
-    @CommandConditions("console-only")
-    private void onApplySkinAll(SRCommandSender sender) {
-        for (SRPlayer player : adapter.getOnlinePlayers()) {
-            try {
-                skinApplier.applySkin(player.getAs(Object.class));
-            } catch (DataRequestException ignored) {
-                sender.sendMessage(Message.ADMINCOMMAND_APPLYSKINALL_PLAYER_ERROR, Placeholder.unparsed("player", player.getName()));
-            }
-        }
-
-        sender.sendMessage(Message.ADMINCOMMAND_APPLYSKINALL_SUCCESS);
-    }
-
-    @Subcommand("purgeolddata")
+    @ConsoleOnly
+    @Command("purgeolddata <days>")
     @CommandPermission(PermissionRegistry.SR_PURGE_OLD_DATA)
-    @Description(Message.HELP_SR_PURGE_OLD_DATA)
-    @CommandConditions("console-only")
+    @CommandDescription(Message.HELP_SR_PURGE_OLD_DATA)
     private void onPurgeOldData(SRCommandSender sender, int days) {
         if (skinStorage.purgeOldSkins(days)) {
             sender.sendMessage(Message.ADMINCOMMAND_PURGEOLDDATA_SUCCESS);
@@ -440,15 +503,15 @@ public final class SRCommand {
         }
     }
 
-    @Subcommand("dump")
+    @Command("dump")
     @CommandPermission(PermissionRegistry.SR_DUMP)
-    @Description(Message.HELP_SR_DUMP)
+    @CommandDescription(Message.HELP_SR_DUMP)
     private void onDump(SRCommandSender sender) {
         try {
             sender.sendMessage(Message.ADMINCOMMAND_DUMP_UPLOADING);
             Optional<String> url = dumpService.dump();
             if (url.isPresent()) {
-                sender.sendMessage(Message.ADMINCOMMAND_DUMP_SUCCESS, Placeholder.unparsed("url", "https://bytebin.lucko.me/" + url.get()));
+                sender.sendMessage(Message.ADMINCOMMAND_DUMP_SUCCESS, Placeholder.unparsed("url", "https://bytebin.lucko.me/%s".formatted(url.get())));
             } else {
                 sender.sendMessage(Message.ADMINCOMMAND_DUMP_ERROR);
             }
@@ -456,10 +519,5 @@ public final class SRCommand {
             logger.severe("Failed to dump data", e);
             sender.sendMessage(Message.ADMINCOMMAND_DUMP_ERROR);
         }
-    }
-
-    public enum PlayerOrSkin {
-        PLAYER,
-        SKIN,
     }
 }

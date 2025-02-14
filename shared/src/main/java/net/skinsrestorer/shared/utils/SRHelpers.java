@@ -17,7 +17,17 @@
  */
 package net.skinsrestorer.shared.utils;
 
+import ch.jalu.configme.SettingsManager;
+import net.skinsrestorer.api.Base64Utils;
+import net.skinsrestorer.api.property.SkinProperty;
+import net.skinsrestorer.shared.config.MessageConfig;
+import net.skinsrestorer.shared.subjects.SRCommandSender;
+import net.skinsrestorer.shared.subjects.messages.ComponentHelper;
+import net.skinsrestorer.shared.subjects.messages.Message;
+import net.skinsrestorer.shared.subjects.messages.SkinsRestorerLocale;
+
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -26,11 +36,17 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.SimpleDateFormat;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 public class SRHelpers {
+    public static final SkinProperty EMPTY_SKIN = SkinProperty.of("", "");
+    public static final String MESSAGE_CHANNEL = "sr:messagechannel";
     private static final String NAMEMC_IMG_URL = "https://s.namemc.com/i/%s.png";
 
     private SRHelpers() {
@@ -44,29 +60,43 @@ public class SRHelpers {
         return throwable;
     }
 
-    public static long hashSha256String(String str) {
+    public static byte[] hashSHA256ToBytes(byte[] input) {
         try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(str.getBytes(StandardCharsets.UTF_8));
-            byte[] digest = md.digest();
-            return ByteBuffer.wrap(digest).getLong();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("Failed to get SHA-256 hash algorithm", e);
-        }
-    }
-
-    public static byte[] md5(byte[] input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.update(input);
-            return md.digest();
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return digest.digest(input);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
     }
 
+    public static long hashSha256ToLong(byte[] bytes) {
+        return ByteBuffer.wrap(hashSHA256ToBytes(bytes)).getLong();
+    }
+
+    public static long hashSha256ToLong(String str) {
+        return hashSha256ToLong(str.getBytes(StandardCharsets.UTF_8));
+    }
+
+    public static String hashSha256ToHex(byte[] bytes) {
+        return bytesToHex(hashSHA256ToBytes(bytes));
+    }
+
+    public static String hashSha256ToHex(String str) {
+        return hashSha256ToHex(str.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : bytes) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) hexString.append('0');
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
+
     public static long getEpochSecond() {
-        return System.currentTimeMillis() / 1000L;
+        return TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
     }
 
     public static void renameFile(Path parent, String oldName, String newName) throws IOException {
@@ -74,7 +104,7 @@ public class SRHelpers {
             // Folders are case-insensitive on Windows, so we need to check it using this method
             List<String> files = stream.map(Path::getFileName).map(Path::toString).toList();
 
-            String tempName = newName + "_temp";
+            String tempName = "%s_temp".formatted(newName);
             if (files.contains(oldName) && !files.contains(tempName) && !files.contains(newName)) {
                 Path oldPath = parent.resolve(oldName);
                 Path tempPath = parent.resolve(tempName);
@@ -89,13 +119,11 @@ public class SRHelpers {
     }
 
     public static <E> E getRandomEntry(List<E> list) {
-        Random random = ThreadLocalRandom.current();
-        return list.get(random.nextInt(list.size()));
+        return list.get(ThreadLocalRandom.current().nextInt(list.size()));
     }
 
-    public static <E> E getRandomEntry(Set<E> list) {
-        Random random = ThreadLocalRandom.current();
-        int index = random.nextInt(list.size());
+    public static <E> E getRandomEntry(Collection<E> list) {
+        int index = ThreadLocalRandom.current().nextInt(list.size());
         int i = 0;
         for (E entry : list) {
             if (i == index) {
@@ -113,37 +141,21 @@ public class SRHelpers {
 
         String majorVersion;
         if (split.length == 0 || split.length > 2) {
-            throw new IllegalArgumentException("Invalid Java version: " + specVersion);
+            throw new IllegalArgumentException("Invalid Java version: %s".formatted(specVersion));
         } else if (split.length == 1) {
             majorVersion = split[0];
         } else if (split[0].equals("1")) {
             majorVersion = split[1];
         } else {
-            throw new IllegalArgumentException("Invalid Java version: " + specVersion);
+            throw new IllegalArgumentException("Invalid Java version: %s".formatted(specVersion));
         }
 
         return Integer.parseInt(majorVersion);
     }
 
-    public static String lowerCaseCapitalize(String str) {
-        if (str == null || str.isEmpty()) {
-            return str;
-        }
-
-        return capitalize(str.toLowerCase(Locale.ROOT));
-    }
-
-    public static String capitalize(String str) {
-        if (str == null || str.isEmpty()) {
-            return str;
-        }
-
-        return str.substring(0, 1).toUpperCase(Locale.ROOT) + str.substring(1);
-    }
-
     public static Optional<URL> parseURL(String str) {
         try {
-            return Optional.of(new URL(str));
+            return Optional.of(URI.create(str).toURL());
         } catch (Exception e) {
             return Optional.empty();
         }
@@ -171,7 +183,7 @@ public class SRHelpers {
             String skinPath = "/skin/";
             if (path.startsWith(skinPath)) {
                 String uuid = path.substring(skinPath.length());
-                return String.format(NAMEMC_IMG_URL, uuid);
+                return NAMEMC_IMG_URL.formatted(uuid);
             }
         }
 
@@ -192,10 +204,6 @@ public class SRHelpers {
         boolean isNamemc = host.equals("namemc.com") || host.endsWith(".namemc.com");
         if (isNamemc) {
             String path = uriOptional.get().getPath();
-            if (path == null) {
-                return skinInput;
-            }
-
             String profilePath = "/profile/";
             if (path.startsWith(profilePath)) {
                 String usernamePart = path.substring(profilePath.length());
@@ -211,5 +219,93 @@ public class SRHelpers {
         }
 
         return skinInput;
+    }
+
+    public static String formatEpochSeconds(SettingsManager settings, long epochSeconds, Locale locale) {
+        return formatEpochMillis(settings, TimeUnit.SECONDS.toMillis(epochSeconds), locale);
+    }
+
+    public static String formatEpochMillis(SettingsManager settings, long epochMillis, Locale locale) {
+        return new SimpleDateFormat(settings.getProperty(MessageConfig.DATE_FORMAT), locale)
+                .format(new Date(epochMillis));
+    }
+
+    public static <E extends Enum<E>, V> Map<E, V> suppliedMap(Class<E> clazz, Function<E, V> mapper) {
+        Map<E, V> map = new EnumMap<>(clazz);
+        for (E e : clazz.getEnumConstants()) {
+            map.put(e, mapper.apply(e));
+        }
+
+        return map;
+    }
+
+    public static boolean isNotAllowedUnquotedString(String str) {
+        return !str.chars().allMatch(c -> isAllowedInUnquotedString((char) c));
+    }
+
+    public static boolean isAllowedInUnquotedString(char c) {
+        return c >= '0' && c <= '9'
+                || c >= 'A' && c <= 'Z'
+                || c >= 'a' && c <= 'z'
+                || c == '_' || c == '-'
+                || c == '.' || c == '+';
+    }
+
+    public static String durationFormat(SkinsRestorerLocale locale, SRCommandSender sender, Duration duration) {
+        long days = duration.toDaysPart();
+        long hours = duration.toHoursPart();
+        long minutes = duration.toMinutesPart();
+        long seconds = duration.toSecondsPart();
+
+        StringBuilder result = new StringBuilder();
+        if (days > 0) {
+            result.append(days)
+                    .append(ComponentHelper.convertJsonToPlain(locale.getMessageRequired(sender, days == 1 ? Message.DURATION_DAY : Message.DURATION_DAYS)))
+                    .append(" ");
+        }
+        if (hours > 0) {
+            result.append(hours)
+                    .append(ComponentHelper.convertJsonToPlain(locale.getMessageRequired(sender, hours == 1 ? Message.DURATION_HOUR : Message.DURATION_HOURS)))
+                    .append(" ");
+        }
+        if (minutes > 0) {
+            result.append(minutes)
+                    .append(ComponentHelper.convertJsonToPlain(locale.getMessageRequired(sender, minutes == 1 ? Message.DURATION_MINUTE : Message.DURATION_MINUTES)))
+                    .append(" ");
+        }
+        if (seconds > 0 || result.isEmpty()) {
+            result.append(seconds)
+                    .append(ComponentHelper.convertJsonToPlain(locale.getMessageRequired(sender, seconds == 1 ? Message.DURATION_SECOND : Message.DURATION_SECONDS)))
+                    .append(" ");
+        }
+
+        return result.toString().trim();
+    }
+
+    @SuppressWarnings("HttpUrlsUsage")
+    public static String encodeHashToTexturesValue(String textureHash) {
+        return Base64Utils.encode("{\"textures\":{\"SKIN\":{\"url\":\"http://textures.minecraft.net/texture/%s\"}}}".formatted(textureHash));
+    }
+
+    public static void createDirectoriesSafe(Path path) {
+        if (!Files.isDirectory(path)) { // In case the directory is a symbol link
+            try {
+                Files.createDirectories(path);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to create directories: %s".formatted(path), e);
+            }
+        }
+    }
+
+    public static void writeIfNeeded(Path path, String content) throws IOException {
+        if (Files.exists(path)) {
+            var existingContent = Files.readString(path);
+            if (!existingContent.equals(content)) {
+                Files.writeString(path, content);
+            }
+        } else {
+            SRHelpers.createDirectoriesSafe(path.getParent());
+            Files.writeString(path, content);
+        }
     }
 }

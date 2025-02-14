@@ -17,21 +17,13 @@
  */
 package net.skinsrestorer.shared.plugin;
 
+import net.skinsrestorer.shared.subjects.SRCommandSender;
 import net.skinsrestorer.shared.subjects.SRPlayer;
 
-import java.util.Map;
-import java.util.Optional;
-
-public interface SRServerAdapter<P, C> extends SRPlatformAdapter<P, C> {
-    void runSync(Runnable runnable);
+public interface SRServerAdapter extends SRPlatformAdapter {
+    void runSync(SRCommandSender sender, Runnable runnable);
 
     void runSyncToPlayer(SRPlayer player, Runnable runnable);
 
     boolean determineProxy();
-
-    void openServerGUI(SRPlayer player, int page);
-
-    void openProxyGUI(SRPlayer player, int page, Map<String, String> skinList);
-
-    Optional<SRPlayer> getPlayer(String name);
 }

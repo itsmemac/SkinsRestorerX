@@ -17,10 +17,14 @@
  */
 package net.skinsrestorer.adapter;
 
-import net.skinsrestorer.api.property.SkinProperty;
+import lombok.SneakyThrows;
+import net.skinsrestorer.api.property.SkinIdentifier;
 import net.skinsrestorer.api.property.SkinVariant;
+import net.skinsrestorer.shared.storage.HardcodedSkins;
 import net.skinsrestorer.shared.storage.adapter.StorageAdapter;
 import net.skinsrestorer.shared.storage.model.cache.MojangCacheData;
+import net.skinsrestorer.shared.storage.model.player.FavouriteData;
+import net.skinsrestorer.shared.storage.model.player.HistoryData;
 import net.skinsrestorer.shared.storage.model.player.PlayerData;
 import net.skinsrestorer.shared.storage.model.skin.CustomSkinData;
 import net.skinsrestorer.shared.storage.model.skin.PlayerSkinData;
@@ -28,24 +32,45 @@ import net.skinsrestorer.shared.storage.model.skin.URLSkinData;
 import org.junit.Assert;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 public class AdapterHelper {
     private static final String DEFAULT_NAME = "Pistonmaster";
     private static final UUID DEFAULT_UUID = UUID.nameUUIDFromBytes(DEFAULT_NAME.getBytes(StandardCharsets.UTF_8));
 
-    public static void testAdapter(StorageAdapter adapter, boolean checkCustom) {
-        adapter.setCachedUUID("test", MojangCacheData.of(UUID.randomUUID(), -1));
-        adapter.setPlayerData(UUID.randomUUID(), PlayerData.of(UUID.randomUUID(), null));
-        adapter.setPlayerSkinData(DEFAULT_UUID, PlayerSkinData.of(DEFAULT_UUID, DEFAULT_NAME, SkinProperty.of("test", "test"), -1));
-        adapter.setCustomSkinData("test-skin", CustomSkinData.of("test-skin", SkinProperty.of("test", "test")));
-        adapter.setURLSkinData("test", URLSkinData.of("https://test.com", "test", SkinProperty.of("test", "test"), SkinVariant.CLASSIC));
+    @SneakyThrows
+    public static void testAdapter(StorageAdapter adapter) {
+        UUID playerId = UUID.randomUUID();
+        PlayerData playerData = PlayerData.of(playerId, null, List.of(
+                HistoryData.of(0, SkinIdentifier.ofCustom("abc"))
+        ), List.of(
+                FavouriteData.of(0, SkinIdentifier.ofCustom("abc"))
+        ));
 
-        if (checkCustom) {
-            // Check if offset works as well, we actually have two skins in the storage for GUI
-            Assert.assertEquals(1, adapter.getStoredGUISkins(1).size());
-        } else {
-            Assert.assertEquals(1, adapter.getStoredGUISkins(0).size());
-        }
+        adapter.setCachedUUID("test", MojangCacheData.of(UUID.randomUUID(), -1));
+        adapter.setPlayerData(playerId, playerData);
+        adapter.setPlayerSkinData(DEFAULT_UUID, PlayerSkinData.of(DEFAULT_UUID, DEFAULT_NAME,
+                HardcodedSkins.STEVE.getProperty(), -1));
+        adapter.setURLSkinData("test", URLSkinData.of("https://test.com", "test",
+                HardcodedSkins.STEVE.getProperty(), SkinVariant.CLASSIC));
+        adapter.setCustomSkinData("test-skin", CustomSkinData.of("test-skin",
+                null, HardcodedSkins.STEVE.getProperty()));
+        adapter.setCustomSkinData("test-skin2", CustomSkinData.of("test-skin2",
+                null, HardcodedSkins.ALEX.getProperty()));
+
+        Assert.assertEquals(2, adapter.getTotalCustomSkins());
+        Assert.assertEquals(2, adapter.getCustomGUISkins(0, Integer.MAX_VALUE).size());
+
+        // Check if offset works as well, we actually have two skins in the storage for GUI
+        Assert.assertEquals(1, adapter.getCustomGUISkins(1, Integer.MAX_VALUE).size());
+
+        Assert.assertEquals(1, adapter.getTotalPlayerSkins());
+        Assert.assertEquals(1, adapter.getPlayerGUISkins(0, Integer.MAX_VALUE).size());
+
+        // Check if offset works as well, we actually have one skins in the storage for GUI
+        Assert.assertEquals(0, adapter.getPlayerGUISkins(1, Integer.MAX_VALUE).size());
+
+        Assert.assertEquals(playerData, adapter.getPlayerData(playerId).orElseThrow());
     }
 }

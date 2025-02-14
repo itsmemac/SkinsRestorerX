@@ -4,27 +4,31 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":skinsrestorer-bukkit", "shadow"))
-    implementation(project(":skinsrestorer-bungee", "shadow"))
-    implementation(project(":skinsrestorer-velocity", "shadow"))
+    implementation(project(":skinsrestorer-bukkit", "downgraded"))
+    implementation(project(":skinsrestorer-bungee", "downgraded"))
+    implementation(project(":skinsrestorer-velocity", "downgraded"))
 }
 
 tasks {
     jar {
-        archiveFileName = "SkinsRestorer-java17.jar"
-        destinationDirectory = rootProject.projectDir.resolve("build/libs")
+        archiveClassifier = "only-merged"
 
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
         dependsOn(configurations.runtimeClasspath)
         from({ configurations.runtimeClasspath.get().map { zipTree(it) } })
-
-        finalizedBy(shadeDowngradedApi)
     }
     shadeDowngradedApi {
+        dependsOn(jar)
+
+        inputFile = jar.get().archiveFile
+        downgradeTo = JavaVersion.VERSION_1_8
+
         archiveFileName = "SkinsRestorer.jar"
         destinationDirectory = rootProject.projectDir.resolve("build/libs")
 
-        downgradeTo = JavaVersion.VERSION_1_8
         shadePath = { _ -> "net/skinsrestorer/shadow/jvmdowngrader" }
+    }
+    build {
+        dependsOn(shadeDowngradedApi)
     }
 }

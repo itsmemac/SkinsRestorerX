@@ -26,15 +26,16 @@ import java.util.List;
 
 import static ch.jalu.configme.properties.PropertyInitializer.newListProperty;
 import static ch.jalu.configme.properties.PropertyInitializer.newProperty;
-import static net.skinsrestorer.shared.utils.FluentList.of;
 
 public class ProxyConfig implements SettingsHolder {
+    @Comment("Whether to enable the backend server command blocking feature.")
     public static final Property<Boolean> NOT_ALLOWED_COMMAND_SERVERS_ENABLED = newProperty("proxy.notAllowedCommandServers.enabled", true);
-    @Comment("Whether ONLY servers from the list below are allowed to use SkinsRestorer commands.")
+    @Comment("Block players from executing SkinsRestorer commands before having joined a server.")
+    public static final Property<Boolean> NOT_ALLOWED_COMMAND_SERVERS_IF_NONE_BLOCK_COMMAND = newProperty("proxy.notAllowedCommandServers.ifNoServerBlockCommand", true);
+    @Comment("When false means servers in the list are NOT allowed to execute SkinsRestorer commands, true means ONLY servers in the list are allowed to execute SkinsRestorer commands.")
     public static final Property<Boolean> NOT_ALLOWED_COMMAND_SERVERS_ALLOWLIST = newProperty("proxy.notAllowedCommandServers.allowList", false);
-    @Comment("Block players from executing SkinsRestorer commands before having joined a server. (RECOMMENDED)")
-    public static final Property<Boolean> NOT_ALLOWED_COMMAND_SERVERS_IF_NONE_BLOCK_COMMAND = newProperty("proxy.notAllowedCommandServers.ifNoServerBlockCommand", false);
-    public static final Property<List<String>> NOT_ALLOWED_COMMAND_SERVERS = newListProperty("proxy.notAllowedCommandServers.list", of("auth"));
+    @Comment("List of servers where SkinsRestorer commands are allowed/disallowed depending on the 'allowList' setting.")
+    public static final Property<List<String>> NOT_ALLOWED_COMMAND_SERVERS = newListProperty("proxy.notAllowedCommandServers.list", List.of("auth"));
 
     @Override
     public void registerComments(CommentsConfiguration conf) {
@@ -48,7 +49,7 @@ public class ProxyConfig implements SettingsHolder {
         );
         conf.setComment("proxy.notAllowedCommandServers",
                 "Disable all SkinsRestorer commands on specific backend servers.",
-                "[!] This only works & is relevant if you're using proxies like bungee / waterfall"
+                "[!] This only works & is relevant if you're using proxies like BungeeCord / Velocity"
         );
     }
 }

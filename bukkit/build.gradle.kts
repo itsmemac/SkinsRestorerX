@@ -12,8 +12,6 @@ dependencies {
     implementation(projects.multiver.bukkit.v17)
     implementation(projects.multiver.bukkit.folia)
 
-    implementation("net.kyori:adventure-platform-bukkit:4.3.3")
-
     rootProject.subprojects.forEach {
         if (!it.name.startsWith("mc-")) return@forEach
 
@@ -26,18 +24,20 @@ dependencies {
         isTransitive = false
     }
 
-    implementation("org.bstats:bstats-bukkit:3.0.2")
-    implementation("com.github.cryptomorin:XSeries:11.0.0")
+    implementation("org.bstats:bstats-bukkit:3.1.0")
+    implementation("com.github.cryptomorin:XSeries:13.0.0")
 
     // MultiPaper support
-    implementation("com.github.puregero:multilib:1.2.1")
+    implementation("com.github.puregero:multilib:1.2.4")
+
+    implementation("org.incendo:cloud-paper:2.0.0-SNAPSHOT")
 
     // PAPI API hook
     compileOnly("me.clip:placeholderapi:2.11.6") {
         isTransitive = false
     }
 
-    compileOnly("com.viaversion:viabackwards-common:5.0.1") {
+    compileOnly("com.viaversion:viabackwards-common:5.2.1") {
         isTransitive = false
     }
     compileOnly("com.viaversion:viaversion:5.0.0") {
@@ -54,9 +54,6 @@ dependencies {
 }
 
 tasks {
-    shadowJar {
-        configureKyoriRelocations()
-    }
     runServer {
         minecraftVersion(libs.versions.runpaperversion.get())
     }

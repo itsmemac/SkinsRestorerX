@@ -17,40 +17,19 @@
  */
 package net.skinsrestorer.shared.subjects;
 
-import net.skinsrestorer.api.property.SkinProperty;
-import net.skinsrestorer.shared.utils.DataStreamConsumer;
-import net.skinsrestorer.shared.utils.MessageProtocolUtil;
+import net.skinsrestorer.shared.codec.SRServerPluginMessage;
+import net.skinsrestorer.shared.utils.ByteBufWriter;
 
-import java.util.Map;
 import java.util.Optional;
 
 public interface SRProxyPlayer extends SRPlayer {
     Optional<String> getCurrentServer();
 
-    default void sendPage(int page, Map<String, String> skins) {
-        sendToMessageChannel(out -> {
-            out.writeUTF("returnSkinsV3");
-            out.writeUTF(getName());
-            out.writeInt(page);
-
-            byte[] ba = MessageProtocolUtil.convertToByteArray(skins);
-            out.writeShort(ba.length);
-            out.write(ba);
-        });
+    default void sendToMessageChannel(SRServerPluginMessage value) {
+        sendToMessageChannel(out -> SRServerPluginMessage.CODEC.write(out, value));
     }
 
-    default void sendUpdateRequest(SkinProperty textures) {
-        sendToMessageChannel(out -> {
-            out.writeUTF("SkinUpdateV2");
-
-            if (textures != null) {
-                out.writeUTF(textures.getValue());
-                out.writeUTF(textures.getSignature());
-            }
-        });
-    }
-
-    default void sendToMessageChannel(DataStreamConsumer consumer) {
+    default void sendToMessageChannel(ByteBufWriter consumer) {
         sendToMessageChannel(consumer.toByteArray());
     }
 

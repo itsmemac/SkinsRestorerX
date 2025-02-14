@@ -18,88 +18,154 @@
 package net.skinsrestorer.shared.gui;
 
 import lombok.RequiredArgsConstructor;
-import net.skinsrestorer.shared.commands.library.CommandManager;
-import net.skinsrestorer.shared.listeners.event.ClickEventInfo;
-import net.skinsrestorer.shared.plugin.SRServerAdapter;
-import net.skinsrestorer.shared.storage.SkinStorageImpl;
-import net.skinsrestorer.shared.subjects.SRCommandSender;
-import net.skinsrestorer.shared.subjects.SRForeign;
-import net.skinsrestorer.shared.subjects.SRServerPlayer;
-import org.jetbrains.annotations.Nullable;
+import net.skinsrestorer.shadow.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.skinsrestorer.shared.codec.SRProxyPluginMessage;
+import net.skinsrestorer.shared.log.SRLogger;
+import net.skinsrestorer.shared.subjects.SRPlayer;
+import net.skinsrestorer.shared.subjects.messages.Message;
+import net.skinsrestorer.shared.subjects.messages.SkinsRestorerLocale;
 
 import javax.inject.Inject;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.Optional;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class SharedGUI {
-    public static final int HEAD_COUNT_PER_PAGE = 36;
-    private final SkinStorageImpl skinStorage;
-    public static final String SR_PROPERTY_INTERNAL_NAME = "skinsrestorer.skull-internal-name";
+    public static final int HEAD_COUNT_PER_PAGE = 9 * 4;
+    private final SkinsRestorerLocale locale;
+    private final SRLogger logger;
 
-    public <T> T createGUI(GUIManager<T> manager, Consumer<ClickEventInfo> callback, SRForeign player, int page, @Nullable Map<String, String> skinList) {
-        if (page > 999) {
-            page = 999;
-        }
+    public SRInventory createGUIPage(SRPlayer player, PageInfo pageInfo) {
+        Map<Integer, SRInventory.Item> items = new HashMap<>();
 
-        if (skinList == null) {
-            int skinOffset = HEAD_COUNT_PER_PAGE * page;
-
-            skinList = skinStorage.getGUISkins(skinOffset);
-        }
-
-        return manager.createGUI(callback, player, page, skinList);
-    }
-
-    @RequiredArgsConstructor(onConstructor_ = @Inject)
-    public static class ServerGUIActions implements Consumer<ClickEventInfo> {
-        private final SRServerAdapter<?, ?> adapter;
-        private final CommandManager<SRCommandSender> commandManager;
-
-        @Override
-        public void accept(ClickEventInfo event) {
-            SRServerPlayer player = event.player();
-            switch (event.material()) {
-                case HEAD -> {
-                    commandManager.executeCommand(player, "skin set " + event.skinName());
-                    player.closeInventory();
-                }
-                case RED_PANE -> {
-                    commandManager.executeCommand(player, "skin clear");
-                    player.closeInventory();
-                }
-                case GREEN_PANE -> adapter.runAsync(() -> adapter.openServerGUI(player, event.currentPage() + 1));
-                case YELLOW_PANE -> adapter.runAsync(() -> adapter.openServerGUI(player, event.currentPage() - 1));
+        int skinCount = 0;
+        for (GUISkinEntry entry : pageInfo.skinList()) {
+            if (skinCount >= SharedGUI.HEAD_COUNT_PER_PAGE) {
+                logger.warning("SkinsGUI: Skin count is more than 36, skipping...");
+                break;
             }
-        }
-    }
 
-    @RequiredArgsConstructor(onConstructor_ = @Inject)
-    public static class ProxyGUIActions implements Consumer<ClickEventInfo> {
-        private final SRServerAdapter<?, ?> adapter;
-
-        @Override
-        public void accept(ClickEventInfo event) {
-            SRServerPlayer player = event.player();
-            switch (event.material()) {
-                case HEAD -> {
-                    adapter.runAsync(() -> event.player().sendToMessageChannel(out -> {
-                        out.writeUTF("setSkin");
-                        out.writeUTF(player.getName());
-                        out.writeUTF(event.skinName());
-                    }));
-                    player.closeInventory();
-                }
-                case RED_PANE -> {
-                    adapter.runAsync(() -> event.player().sendToMessageChannel(out -> {
-                        out.writeUTF("clearSkin");
-                        out.writeUTF(player.getName());
-                    }));
-                    player.closeInventory();
-                }
-                case GREEN_PANE -> adapter.runAsync(() -> event.player().requestSkinsFromProxy(event.currentPage() + 1));
-                case YELLOW_PANE -> adapter.runAsync(() -> event.player().requestSkinsFromProxy(event.currentPage() - 1));
-            }
+            Map<ClickEventType, SRInventory.ClickEventAction> actions = new HashMap<>();
+            actions.put(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.SetSkinPayload(
+                    entry.skinIdentifier()
+            )), true));
+            actions.put(ClickEventType.SHIFT_LEFT, new SRInventory.ClickEventAction(List.of(new SRProxyPluginMessage.GUIActionChannelPayload(entry.isFavourite() ? new SRProxyPluginMessage.GUIActionChannelPayload.RemoveFavouritePayload(
+                    entry.skinIdentifier()
+            ) : new SRProxyPluginMessage.GUIActionChannelPayload.AddFavouritePayload(
+                    entry.skinIdentifier()
+            )), new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.OpenPagePayload(
+                    pageInfo.page(), pageInfo.pageType()
+            ))), false));
+            items.put(skinCount, new SRInventory.Item(
+                    SRInventory.MaterialType.SKULL,
+                    entry.skinName(),
+                    entry.lore(),
+                    Optional.of(entry.textureHash()),
+                    entry.isFavourite(),
+                    actions
+            ));
+            skinCount++;
         }
+
+        if (pageInfo.hasPrevious()) {
+            items.put(48, new SRInventory.Item(
+                    SRInventory.MaterialType.ARROW,
+                    locale.getMessageRequired(player, Message.SKINSMENU_PREVIOUS_PAGE),
+                    List.of(),
+                    Optional.empty(),
+                    false,
+                    Map.ofEntries(
+                            Map.entry(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.OpenPagePayload(
+                                    pageInfo.page() - 1, pageInfo.pageType()
+                            )), false))
+                    )
+            ));
+        } else if (pageInfo.pageType() != PageType.SELECT) {
+            items.put(48, new SRInventory.Item(
+                    SRInventory.MaterialType.ARROW,
+                    locale.getMessageRequired(player, Message.SKINSMENU_BACK_SELECT_BUTTON),
+                    List.of(),
+                    Optional.empty(),
+                    false,
+                    Map.ofEntries(
+                            Map.entry(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.OpenPagePayload(
+                                    0, PageType.SELECT
+                            )), false))
+                    )
+            ));
+        }
+
+        items.put(49, new SRInventory.Item(
+                SRInventory.MaterialType.BARRIER,
+                locale.getMessageRequired(player, Message.SKINSMENU_CLEAR_SKIN),
+                List.of(),
+                Optional.empty(),
+                false,
+                Map.ofEntries(
+                        Map.entry(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.ClearSkinPayload()), true))
+                )
+        ));
+
+        if (pageInfo.hasNext()) {
+            items.put(50, new SRInventory.Item(
+                    SRInventory.MaterialType.ARROW,
+                    locale.getMessageRequired(player, Message.SKINSMENU_NEXT_PAGE),
+                    List.of(),
+                    Optional.empty(),
+                    false,
+                    Map.ofEntries(
+                            Map.entry(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.OpenPagePayload(
+                                    pageInfo.page() + 1, pageInfo.pageType()
+                            )), false))
+                    )
+            ));
+        }
+
+        if (pageInfo.pageType() == PageType.SELECT) {
+            items.put(20, new SRInventory.Item(
+                    SRInventory.MaterialType.BOOKSHELF,
+                    locale.getMessageRequired(player, Message.SKINSMENU_MAIN_BUTTON),
+                    List.of(),
+                    Optional.empty(),
+                    false,
+                    Map.ofEntries(
+                            Map.entry(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.OpenPagePayload(
+                                    0, PageType.MAIN
+                            )), false))
+                    )
+            ));
+            items.put(22, new SRInventory.Item(
+                    SRInventory.MaterialType.ENDER_EYE,
+                    locale.getMessageRequired(player, Message.SKINSMENU_HISTORY_BUTTON),
+                    List.of(),
+                    Optional.empty(),
+                    false,
+                    Map.ofEntries(
+                            Map.entry(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.OpenPagePayload(
+                                    0, PageType.HISTORY
+                            )), false))
+                    )
+            ));
+            items.put(24, new SRInventory.Item(
+                    SRInventory.MaterialType.ENCHANTING_TABLE,
+                    locale.getMessageRequired(player, Message.SKINSMENU_FAVOURITES_BUTTON),
+                    List.of(),
+                    Optional.empty(),
+                    false,
+                    Map.ofEntries(
+                            Map.entry(ClickEventType.LEFT, new SRInventory.ClickEventAction(new SRProxyPluginMessage.GUIActionChannelPayload(new SRProxyPluginMessage.GUIActionChannelPayload.OpenPagePayload(
+                                    0, PageType.FAVOURITES
+                            )), false))
+                    )
+            ));
+        }
+
+        return new SRInventory(
+                6,
+                locale.getMessageRequired(player, pageInfo.pageType().getTitle(),
+                        Placeholder.parsed("page_number", String.valueOf(pageInfo.page() + 1))),
+                items);
     }
 }

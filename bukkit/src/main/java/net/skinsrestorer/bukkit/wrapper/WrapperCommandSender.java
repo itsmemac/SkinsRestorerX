@@ -19,11 +19,11 @@ package net.skinsrestorer.bukkit.wrapper;
 
 import lombok.NonNull;
 import lombok.experimental.SuperBuilder;
-import net.kyori.adventure.text.Component;
+import net.skinsrestorer.shadow.kyori.adventure.text.Component;
 import net.skinsrestorer.bukkit.SRBukkitAdapter;
 import net.skinsrestorer.shared.subjects.AbstractSRCommandSender;
+import net.skinsrestorer.shared.subjects.messages.ComponentString;
 import net.skinsrestorer.shared.subjects.permissions.Permission;
-import net.skinsrestorer.shared.utils.ComponentString;
 import net.skinsrestorer.shared.utils.Tristate;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
@@ -34,13 +34,18 @@ public class WrapperCommandSender extends AbstractSRCommandSender {
     private final @NonNull CommandSender sender;
 
     @Override
+    public <S> S getAs(Class<S> senderClass) {
+        return senderClass.cast(sender);
+    }
+
+    @Override
     public void sendMessage(ComponentString messageJson) {
         Component message = BukkitComponentHelper.deserialize(messageJson);
 
-        Runnable runnable = () -> adapter.getAdventure().sender(sender).sendMessage(message);
+        Runnable runnable = () -> adapter.getAdventure().get().sender(sender).sendMessage(message);
         if (sender instanceof BlockCommandSender) {
             // Command blocks require messages to be sent synchronously in Bukkit
-            adapter.runSync(runnable);
+            adapter.runSync(this, runnable);
         } else {
             runnable.run();
         }
@@ -48,12 +53,6 @@ public class WrapperCommandSender extends AbstractSRCommandSender {
 
     @Override
     public boolean hasPermission(Permission permission) {
-        return permission.checkPermission(settings, p -> {
-            boolean hasPermission = sender.hasPermission(p);
-
-            // If a platform makes a permission false or true, return that value
-            boolean explicit = hasPermission || sender.isPermissionSet(p);
-            return explicit ? Tristate.fromBoolean(hasPermission) : Tristate.UNDEFINED;
-        });
+        return permission.checkPermission(p -> Tristate.fromBoolean(sender.hasPermission(p)));
     }
 }

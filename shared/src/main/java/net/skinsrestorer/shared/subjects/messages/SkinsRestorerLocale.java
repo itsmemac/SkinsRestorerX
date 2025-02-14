@@ -19,16 +19,12 @@ package net.skinsrestorer.shared.subjects.messages;
 
 import ch.jalu.configme.SettingsManager;
 import lombok.Getter;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import net.skinsrestorer.shadow.kyori.adventure.text.Component;
+import net.skinsrestorer.shadow.kyori.adventure.text.minimessage.MiniMessage;
+import net.skinsrestorer.shadow.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.skinsrestorer.shadow.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.skinsrestorer.shared.config.MessageConfig;
-import net.skinsrestorer.shared.subjects.SRCommandSender;
 import net.skinsrestorer.shared.subjects.SRForeign;
-import net.skinsrestorer.shared.subjects.SRPlayer;
-import net.skinsrestorer.shared.utils.ComponentHelper;
-import net.skinsrestorer.shared.utils.ComponentString;
 
 import javax.inject.Inject;
 import java.util.Locale;
@@ -36,6 +32,8 @@ import java.util.Optional;
 
 public class SkinsRestorerLocale {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    @Getter
+    private final SRForeign englishForeign = () -> Locale.ENGLISH;
     @Inject
     private LocaleManager localeManager;
     @Inject
@@ -44,24 +42,20 @@ public class SkinsRestorerLocale {
     private final SRForeign defaultForeign = () -> settings.getProperty(MessageConfig.LOCALE);
 
     public ComponentString getMessageRequired(SRForeign foreign, Message key, TagResolver... tagResolver) {
-        return ComponentHelper.convertToJsonString(getMessageInternal(foreign, key, TagResolver.resolver(tagResolver))
+        return ComponentHelper.convertComponentToJson(getMessageInternal(foreign, key, TagResolver.resolver(tagResolver))
                 .orElseGet(Component::empty));
     }
 
     public Optional<ComponentString> getMessageOptional(SRForeign foreign, Message key, TagResolver... tagResolver) {
         return getMessageInternal(foreign, key, TagResolver.resolver(tagResolver))
-                .map(ComponentHelper::convertToJsonString);
+                .map(ComponentHelper::convertComponentToJson);
     }
 
     private Optional<Component> getMessageInternal(SRForeign foreign, Message key, TagResolver tagResolver) {
-        SRForeign target = settings.getProperty(MessageConfig.PER_ISSUER_LOCALE) ? foreign : defaultForeign;
-        boolean isConsole = foreign instanceof SRCommandSender && !(foreign instanceof SRPlayer);
-        Locale locale = isConsole ? settings.getProperty(MessageConfig.CONSOLE_LOCALE) : target.getLocale();
-
-        String message = localeManager.getMessage(locale, key);
+        String message = localeManager.getMessage(foreign.getLocale(), key);
 
         if (message == null) {
-            throw new IllegalStateException(String.format("Message %s not found", key.name()));
+            throw new IllegalStateException("Message %s not found".formatted(key.name()));
         }
 
         if (message.isEmpty()) {
@@ -69,10 +63,9 @@ public class SkinsRestorerLocale {
         }
 
         Component component = miniMessage.deserialize(message, tagResolver);
-
         Message parent = key.getParent();
-        if (parent != null && parent != Message.PREFIX_FORMAT && !settings.getProperty(MessageConfig.DISABLE_PREFIX)) {
-            return getMessageInternal(target, Message.PREFIX_FORMAT, TagResolver.resolver(
+        if (parent != null && (parent != Message.PREFIX_FORMAT || !settings.getProperty(MessageConfig.DISABLE_PREFIX))) {
+            return getMessageInternal(foreign, parent, TagResolver.resolver(
                     tagResolver,
                     Placeholder.component("message", component)
             ));

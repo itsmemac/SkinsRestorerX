@@ -25,7 +25,6 @@ import net.skinsrestorer.shared.log.SRLogger;
 
 import javax.inject.Inject;
 import javax.net.ssl.HttpsURLConnection;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -54,7 +53,7 @@ public class HttpClient {
             throw new IOException("Only HTTPS is supported.");
         }
 
-        logger.debug("Sending " + method + " request to " + url + " with body: " + requestBody);
+        logger.debug("Sending %s request to %s with body: %s".formatted(method, url, requestBody));
 
         HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
         connection.setRequestMethod(method.name());
@@ -95,24 +94,17 @@ public class HttpClient {
             throw new IOException("Failed to get input stream.");
         }
 
-        ByteArrayOutputStream byteData = new ByteArrayOutputStream();
-        byte[] buffer = new byte[4096];
-        int read;
-        while ((read = is.read(buffer)) != -1) {
-            byteData.write(buffer, 0, read);
-        }
-
         HttpResponse response = new HttpResponse(
                 connection.getResponseCode(),
-                byteData.toString(StandardCharsets.UTF_8),
+                new String(is.readAllBytes(), StandardCharsets.UTF_8),
                 connection.getHeaderFields()
         );
 
-        logger.debug("Response body: " + response.body()
+        logger.debug("Response body: %s".formatted(response.body()
                 .replace("\n", "")
-                .replace("\r", ""));
-        logger.debug("Response code: " + response.statusCode());
-        logger.debug("Request took " + (System.currentTimeMillis() - start) + "ms.");
+                .replace("\r", "")));
+        logger.debug("Response code: %d".formatted(response.statusCode()));
+        logger.debug("Request took %dms.".formatted(System.currentTimeMillis() - start));
 
         return response;
     }

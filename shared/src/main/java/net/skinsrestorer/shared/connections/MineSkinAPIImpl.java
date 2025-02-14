@@ -83,7 +83,7 @@ public class MineSkinAPIImpl implements MineSkinAPI {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             } catch (IOException e) {
-                logger.debug(SRLogLevel.WARNING, "[ERROR] MineSkin Failed! IOException (connection/disk): (" + imageUrl + ")", e);
+                logger.debug(SRLogLevel.WARNING, "[ERROR] MineSkin Failed! IOException (connection/disk): (%s)".formatted(imageUrl), e);
                 throw new DataRequestExceptionShared(e);
             } finally {
                 lock.unlock();
@@ -95,7 +95,7 @@ public class MineSkinAPIImpl implements MineSkinAPI {
 
     private Optional<MineSkinResponse> genSkinInternal(String imageUrl, @Nullable SkinVariant skinVariant) throws DataRequestException, MineSkinException, IOException, InterruptedException {
         HttpResponse httpResponse = queryURL(imageUrl, skinVariant);
-        logger.debug("MineSkinAPI: Response: " + httpResponse);
+        logger.debug("MineSkinAPI: Response: %s".formatted(httpResponse));
 
         switch (httpResponse.statusCode()) {
             case 200 -> {
@@ -108,7 +108,7 @@ public class MineSkinAPIImpl implements MineSkinAPI {
             case 500, 400 -> {
                 MineSkinErrorResponse response = httpResponse.getBodyAs(MineSkinErrorResponse.class);
                 String error = response.getErrorCode();
-                logger.debug(String.format("[ERROR] MineSkin Failed! Reason: %s Image URL: %s", error, imageUrl));
+                logger.debug("[ERROR] MineSkin Failed! Reason: %s Image URL: %s".formatted(error, imageUrl));
                 // try again
                 return switch (error) {
                     case "failed_to_create_id", "skin_change_failed" -> {
@@ -125,16 +125,16 @@ public class MineSkinAPIImpl implements MineSkinAPI {
                 String errorCode = response.getErrorCode();
                 String error = response.getError();
                 if (errorCode.equals("invalid_api_key")) {
-                    logger.severe("[ERROR] MineSkin API key is invalid! Reason: " + error);
+                    logger.severe("[ERROR] MineSkin API key is invalid! Reason: %s".formatted(error));
                     switch (error) {
                         case "Invalid API Key" ->
-                                logger.severe(String.format("The API Key provided is not registered on MineSkin! Please empty \"%s\" in plugins/SkinsRestorer/config.yml and run /sr reload", APIConfig.MINESKIN_API_KEY.getPath()));
+                                logger.severe("The API Key provided is not registered on MineSkin! Please empty \"%s\" in plugins/SkinsRestorer/config.yml and run /sr reload".formatted(APIConfig.MINESKIN_API_KEY.getPath()));
                         case "Client not allowed" ->
                                 logger.severe("This server ip is not on the api key allowed IPs list!");
                         case "Origin not allowed" ->
                                 logger.severe("This server Origin is not on the api key allowed Origins list!");
                         case "Agent not allowed" ->
-                                logger.severe(String.format("SkinsRestorer's agent \"%s\" is not on the api key allowed agents list!", MINESKIN_USER_AGENT));
+                                logger.severe("SkinsRestorer's agent \"%s\" is not on the api key allowed agents list!".formatted(MINESKIN_USER_AGENT));
                         default -> logger.severe("Unknown error, please report this to SkinsRestorer's discord!");
                     }
 
@@ -163,7 +163,7 @@ public class MineSkinAPIImpl implements MineSkinAPI {
                 return Optional.empty(); // try again after nextRequest
             }
             default -> {
-                logger.debug("[ERROR] MineSkin Failed! Unknown error: (Image URL: " + imageUrl + ") " + httpResponse.statusCode());
+                logger.debug("[ERROR] MineSkin Failed! Unknown error: (Image URL: %s) %d".formatted(imageUrl, httpResponse.statusCode()));
                 throw new MineSkinExceptionShared(Message.ERROR_MS_API_FAILED);
             }
         }
@@ -176,16 +176,14 @@ public class MineSkinAPIImpl implements MineSkinAPI {
 
                 Map<String, String> headers = new HashMap<>();
                 Optional<String> apiKey = getApiKey(settings);
-                if (apiKey.isPresent()) {
-                    headers.put("Authorization", String.format("Bearer %s", apiKey));
-                }
+                apiKey.ifPresent(s -> headers.put("Authorization", "Bearer %s".formatted(s)));
 
                 return httpClient.execute(
                         MINESKIN_ENDPOINT,
                         new HttpClient.RequestBody(gson.toJson(new MineSkinUrlRequest(
                                 skinVariant,
                                 null,
-                                null,
+                                settings.getProperty(APIConfig.MINESKIN_SECRET_SKINS) ? 1 : 0,
                                 url
                         )), HttpClient.HttpType.JSON),
                         HttpClient.HttpType.JSON,

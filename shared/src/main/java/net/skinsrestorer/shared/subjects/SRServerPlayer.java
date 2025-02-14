@@ -17,20 +17,17 @@
  */
 package net.skinsrestorer.shared.subjects;
 
-import net.skinsrestorer.shared.utils.DataStreamConsumer;
+import net.skinsrestorer.shared.codec.SRProxyPluginMessage;
+import net.skinsrestorer.shared.utils.ByteBufWriter;
 
 public interface SRServerPlayer extends SRPlayer {
     void closeInventory();
 
-    default void requestSkinsFromProxy(int page) {
-        sendToMessageChannel(out -> {
-            out.writeUTF("getSkins");
-            out.writeUTF(getName());
-            out.writeInt(page);
-        });
+    default void sendToMessageChannel(SRProxyPluginMessage value) {
+        sendToMessageChannel(out -> SRProxyPluginMessage.CODEC.write(out, value));
     }
 
-    default void sendToMessageChannel(DataStreamConsumer consumer) {
+    default void sendToMessageChannel(ByteBufWriter consumer) {
         sendToMessageChannel(consumer.toByteArray());
     }
 

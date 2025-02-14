@@ -1,18 +1,18 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
 import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
-import shadow.org.apache.tools.zip.ZipEntry
-import shadow.org.apache.tools.zip.ZipOutputStream
-import shadow.org.codehaus.plexus.util.IOUtil
+import org.apache.tools.zip.ZipEntry
+import org.apache.tools.zip.ZipOutputStream
+import org.codehaus.plexus.util.IOUtil
 import java.io.BufferedReader
 import java.io.ByteArrayInputStream
 
 plugins {
     id("sr.base-logic")
-    id("com.github.johnrengelman.shadow")
+    id("com.gradleup.shadow")
 }
 
-val packages = mapOf<String, String>(
+val packages = mapOf(
     "org.mariadb.jdbc" to "net.skinsrestorer.shadow.mariadb"
 )
 
@@ -99,7 +99,7 @@ tasks {
     }
 
     shadowJar {
-        minimize() {
+        minimize {
             exclude(dependency("org.mariadb.jdbc:mariadb-java-client"))
             exclude(project(":skinsrestorer-api"))
         }
@@ -113,8 +113,6 @@ tasks {
 }
 
 fun ShadowJar.configureRelocations() {
-    relocate("com.mojang.brigadier", "net.skinsrestorer.shadow.brigadier")
-
     // Google inject should NOT be relocated
     relocate("com.google.gson", "net.skinsrestorer.shadow.gson")
     relocate("com.google.errorprone", "net.skinsrestorer.shadow.errorprone")
@@ -135,4 +133,7 @@ fun ShadowJar.configureRelocations() {
     relocate("ch.jalu.injector", "net.skinsrestorer.shadow.injector")
 
     relocate("com.github.puregero.multilib", "net.skinsrestorer.shadow.multilib")
+
+    relocate("org.incendo.cloud", "net.skinsrestorer.shadow.cloud")
+    relocate("io.leangen.geantyref", "net.skinsrestorer.shadow.geantyref")
 }

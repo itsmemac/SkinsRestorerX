@@ -17,43 +17,63 @@
  */
 package net.skinsrestorer.shared.connections;
 
+import ch.jalu.configme.SettingsManager;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import net.skinsrestorer.api.exception.DataRequestException;
+import net.skinsrestorer.shared.config.APIConfig;
+import net.skinsrestorer.shared.config.GUIConfig;
 import net.skinsrestorer.shared.connections.responses.RecommenationResponse;
 import net.skinsrestorer.shared.log.SRLogger;
 import net.skinsrestorer.shared.plugin.SRPlatformAdapter;
 import net.skinsrestorer.shared.plugin.SRPlugin;
+import net.skinsrestorer.shared.utils.SRHelpers;
 
 import javax.inject.Inject;
 import java.io.IOException;
+import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class RecommendationsState {
     private final SRPlugin plugin;
-    private final SRPlatformAdapter<?, ?> adapter;
+    private final SRPlatformAdapter adapter;
     private final SRLogger logger;
     private final RecommendationsService recommendationsService;
-    @Getter
-    private RecommenationResponse.SkinInfo[] recommendations = new RecommenationResponse.SkinInfo[0];
+    private final SettingsManager settingsManager;
     private final Gson gson = new GsonBuilder().create();
+    private Map<String, RecommenationResponse.SkinInfo> recommendationsMap = Map.of();
+    private List<RecommenationResponse.SkinInfo> recommendationsList = List.of();
 
     public void scheduleRecommendations() {
+        if (!settingsManager.getProperty(APIConfig.FETCH_RECOMMENDED_SKINS)) {
+            logger.info("Fetching recommended skins is disabled.");
+            return;
+        }
+
         Path path = plugin.getDataFolder().resolve("recommendations.json");
 
         boolean fileExists = Files.exists(path);
         if (fileExists) {
-            try {
-                RecommenationResponse responseObject = gson.fromJson(Files.newBufferedReader(path), RecommenationResponse.class);
-                this.recommendations = responseObject.getSkins();
+            try (Reader reader = Files.newBufferedReader(path)) {
+                RecommenationResponse recommenationResponse = gson.fromJson(reader, RecommenationResponse.class);
+                if (recommenationResponse == null || recommenationResponse.getSkins() == null) {
+                    throw new IOException("Invalid data");
+                }
+
+                setDataFromResponse(recommenationResponse.getSkins());
             } catch (IOException e) {
-                logger.warning("Failed to load recommendations from file: " + e.getMessage());
+                logger.warning("Failed to load recommendations from file: %s".formatted(e.getMessage()));
             }
         }
 
@@ -61,17 +81,49 @@ public class RecommendationsState {
         adapter.runRepeatAsync(() -> {
             try {
                 recommendationsService.getRecommendations().ifPresent(recommenationResponse -> {
-                    this.recommendations = recommenationResponse.getSkins();
+                    setDataFromResponse(recommenationResponse.getSkins());
 
                     try {
-                        Files.write(path, gson.toJson(recommenationResponse).getBytes());
+                        SRHelpers.writeIfNeeded(path, gson.toJson(recommenationResponse));
                     } catch (IOException e) {
-                        logger.warning("Failed to save recommendations to file: " + e.getMessage());
+                        logger.warning("Failed to save recommendations to file: %s".formatted(e.getMessage()));
                     }
                 });
             } catch (IOException | DataRequestException e) {
-                logger.warning("Failed to get recommended skins: " + e.getMessage());
+                logger.warning("Failed to get recommended skins: %s".formatted(e.getMessage()));
             }
         }, offsetSeconds, (int) (TimeUnit.HOURS.toSeconds(6) + offsetSeconds), TimeUnit.SECONDS);
+    }
+
+    private void setDataFromResponse(RecommenationResponse.SkinInfo[] recommendations) {
+        recommendationsMap = Stream.of(recommendations).collect(Collectors.toMap(RecommenationResponse.SkinInfo::getSkinId, skinInfo -> skinInfo));
+        recommendationsList = Arrays.asList(recommendations);
+        Collections.shuffle(recommendationsList);
+    }
+
+    public int getRecommendationsCount() {
+        return getRecommendationsOffset(0, Integer.MAX_VALUE).length;
+    }
+
+    public RecommenationResponse.SkinInfo[] getRecommendationsOffset(int offset, int limit) {
+        return recommendationsList.stream()
+                .filter(skinInfo -> {
+                    if (!settingsManager.getProperty(GUIConfig.RECOMMENDATIONS_GUI_ONLY_LIST)) {
+                        return true;
+                    }
+
+                    return settingsManager.getProperty(GUIConfig.RECOMMENDATIONS_GUI_LIST).contains(skinInfo.getSkinId());
+                })
+                .skip(offset)
+                .limit(limit)
+                .toArray(RecommenationResponse.SkinInfo[]::new);
+    }
+
+    public RecommenationResponse.SkinInfo getRandomRecommendation() {
+        return SRHelpers.getRandomEntry(recommendationsList);
+    }
+
+    public RecommenationResponse.SkinInfo getRecommendation(String skinId) {
+        return recommendationsMap.get(skinId);
     }
 }

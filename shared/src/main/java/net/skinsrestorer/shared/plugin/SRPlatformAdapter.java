@@ -18,24 +18,46 @@
 package net.skinsrestorer.shared.plugin;
 
 import net.skinsrestorer.api.property.SkinProperty;
-import net.skinsrestorer.shared.commands.library.CommandPlatform;
+import net.skinsrestorer.shared.gui.SRInventory;
 import net.skinsrestorer.shared.info.Platform;
 import net.skinsrestorer.shared.info.PluginInfo;
+import net.skinsrestorer.shared.subjects.SRCommandSender;
 import net.skinsrestorer.shared.subjects.SRPlayer;
+import org.incendo.cloud.CommandManager;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public interface SRPlatformAdapter<P, C> extends CommandPlatform<C> {
+public interface SRPlatformAdapter {
+    CommandManager<SRCommandSender> createCommandManager();
+
+    Collection<SRPlayer> getOnlinePlayers(SRCommandSender sender);
+
+    Optional<SRPlayer> getPlayer(SRCommandSender sender, UUID uniqueId);
+
     InputStream getResource(String resource);
+
+    default String getResouceAsString(String resource) {
+        try (InputStream is = getResource(resource)) {
+            if (is == null) {
+                throw new IllegalStateException("Could not find resource %s in resources!".formatted(resource));
+            }
+
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     void runAsync(Runnable runnable);
 
     void runRepeatAsync(Runnable runnable, int delay, int interval, TimeUnit timeUnit);
-
-    boolean isPluginEnabled(String pluginName);
 
     String getPlatformVersion();
 
@@ -46,6 +68,12 @@ public interface SRPlatformAdapter<P, C> extends CommandPlatform<C> {
     Platform getPlatform();
 
     List<PluginInfo> getPlugins();
+
+    default Optional<PluginInfo> getPluginInfo(String name) {
+        return getPlugins().stream()
+                .filter(pluginInfo -> pluginInfo.name().equalsIgnoreCase(name))
+                .findFirst();
+    }
 
     Optional<SkinProperty> getSkinProperty(SRPlayer player);
 
@@ -58,7 +86,7 @@ public interface SRPlatformAdapter<P, C> extends CommandPlatform<C> {
      * @param plugin The plugin to keep the object alive.
      * @param object The object to keep alive.
      */
-    void extendLifeTime(P plugin, Object object);
+    void extendLifeTime(Object plugin, Object object);
 
     boolean supportsDefaultPermissions();
 
@@ -69,4 +97,6 @@ public interface SRPlatformAdapter<P, C> extends CommandPlatform<C> {
      */
     default void shutdownCleanup() {
     }
+
+    void openGUI(SRPlayer player, SRInventory srInventory);
 }

@@ -17,7 +17,6 @@
  */
 package net.skinsrestorer;
 
-import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import net.skinsrestorer.bukkit.SRBukkitAdapter;
 import net.skinsrestorer.bukkit.SRBukkitInit;
 import net.skinsrestorer.bukkit.logger.BukkitConsoleImpl;
@@ -32,7 +31,6 @@ import org.bukkit.Server;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.command.SimpleCommandMap;
-import org.bukkit.help.HelpMap;
 import org.bukkit.plugin.SimplePluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitScheduler;
@@ -42,6 +40,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.logging.Logger;
@@ -88,44 +87,45 @@ public class LoadTest {
         when(server.getBukkitVersion()).thenReturn("1.19.2-R0.1-SNAPSHOT");
         when(server.getVersion()).thenReturn("1.19.2-R0.1-SNAPSHOT");
         when(server.getName()).thenReturn("TestServer");
-        when(server.getCommandMap()).thenReturn(mock(SimpleCommandMap.class));
-        when(server.getHelpMap()).thenReturn(mock(HelpMap.class));
-        when(server.getPluginManager()).thenReturn(mock(SimplePluginManager.class));
+        when(server.getCommandMap()).thenReturn(new SimpleCommandMap(server));
+        SimplePluginManager pluginManager = mock(SimplePluginManager.class);
+        when(pluginManager.getPlugins()).thenReturn(new JavaPlugin[0]);
+        when(server.getPluginManager()).thenReturn(pluginManager);
         when(server.getUpdateFolderFile()).thenReturn(tempDir.toFile());
 
         Bukkit.setServer(server);
 
         JavaPluginMock plugin = mock(JavaPluginMock.class);
-        try (BukkitAudiences adventure = mock(BukkitAudiences.class)) {
-            SRBootstrapper.startPlugin(
-                    runnable -> {
-                        try {
-                            runnable.run();
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
-                        }
-                    },
-                    injector -> {
-                        injector.register(JavaPlugin.class, plugin);
-                        injector.register(Server.class, server);
-                        injector.register(BukkitAudiences.class, adventure);
-                        injector.register(PluginJarProvider.class, () -> pluginFile);
-                        injector.register(DownloaderClassProvider.class, () -> UpdateDownloaderGithub.class);
-                    },
-                    new JavaLoggerImpl(new BukkitConsoleImpl(server.getConsoleSender()), server.getLogger()),
-                    true,
-                    SRBukkitAdapter.class,
-                    SRServerPlugin.class,
-                    configDir,
-                    SRBukkitInit.class
-            );
+        when(plugin.getServer()).thenReturn(server);
+        when(plugin.getName()).thenReturn("SkinsRestorer");
 
-            while (!runQueue.isEmpty()) {
-                try {
-                    runQueue.poll().run();
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+        SRBootstrapper.startPlugin(
+                runnable -> {
+                    try {
+                        runnable.run();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                },
+                List.of(
+                        new SRBootstrapper.PlatformClass<>(JavaPlugin.class, plugin),
+                        new SRBootstrapper.PlatformClass<>(Server.class, server),
+                        new SRBootstrapper.PlatformClass<>(PluginJarProvider.class, () -> pluginFile),
+                        new SRBootstrapper.PlatformClass<>(DownloaderClassProvider.class, () -> UpdateDownloaderGithub.class)
+                ),
+                new JavaLoggerImpl(new BukkitConsoleImpl(server.getConsoleSender()), server.getLogger()),
+                true,
+                SRBukkitAdapter.class,
+                SRServerPlugin.class,
+                configDir,
+                SRBukkitInit.class
+        );
+
+        while (!runQueue.isEmpty()) {
+            try {
+                runQueue.poll().run();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         }
     }

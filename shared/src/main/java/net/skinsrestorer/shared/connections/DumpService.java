@@ -28,6 +28,7 @@ import com.google.gson.JsonObject;
 import lombok.RequiredArgsConstructor;
 import net.skinsrestorer.api.exception.DataRequestException;
 import net.skinsrestorer.shared.config.APIConfig;
+import net.skinsrestorer.shared.config.DatabaseConfig;
 import net.skinsrestorer.shared.connections.http.HttpClient;
 import net.skinsrestorer.shared.connections.http.HttpResponse;
 import net.skinsrestorer.shared.connections.requests.DumpInfo;
@@ -72,7 +73,7 @@ public class DumpService {
 
     private final SRLogger logger;
     private final SRPlugin plugin;
-    private final SRPlatformAdapter<?, ?> adapter;
+    private final SRPlatformAdapter adapter;
     private final Injector injector;
     private final HttpClient httpClient;
     private final SettingsManager settingsManager;
@@ -114,7 +115,15 @@ public class DumpService {
             jsonObject.add(keyName, gson.toJsonTree(configurationData.getValue(key)));
         }
 
-        DumpInfo.PluginInfo pluginInfo = new DumpInfo.PluginInfo(proxyMode, configMap);
+        DumpInfo.PluginInfo.StorageType storageType = proxyMode != null && proxyMode ? DumpInfo.PluginInfo.StorageType.NONE :
+                (settingsManager.getProperty(DatabaseConfig.MYSQL_ENABLED) ?
+                        DumpInfo.PluginInfo.StorageType.MYSQL : DumpInfo.PluginInfo.StorageType.FILE);
+
+        DumpInfo.PluginInfo pluginInfo = new DumpInfo.PluginInfo(
+                proxyMode,
+                storageType,
+                configMap
+        );
 
         EnvironmentInfo environmentInfo = EnvironmentInfo.determineEnvironment(adapter);
         PlatformInfo platformInfo = new PlatformInfo(
@@ -145,7 +154,7 @@ public class DumpService {
         );
 
         if (response.statusCode() != 201) {
-            logger.warning("Failed to dump data to bytebin. Response code: " + response.statusCode());
+            logger.warning("Failed to dump data to bytebin. Response code: %d".formatted(response.statusCode()));
             return Optional.empty();
         }
 

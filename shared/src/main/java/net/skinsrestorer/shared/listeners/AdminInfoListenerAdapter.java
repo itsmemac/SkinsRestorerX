@@ -18,7 +18,7 @@
 package net.skinsrestorer.shared.listeners;
 
 import lombok.RequiredArgsConstructor;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.skinsrestorer.shadow.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.skinsrestorer.shared.listeners.event.SRServerConnectedEvent;
 import net.skinsrestorer.shared.plugin.SRPlatformAdapter;
 import net.skinsrestorer.shared.plugin.SRPlugin;
@@ -33,7 +33,7 @@ import javax.inject.Inject;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public final class AdminInfoListenerAdapter {
     private final SRPlugin plugin;
-    private final SRPlatformAdapter<?, ?> adapter;
+    private final SRPlatformAdapter adapter;
     private final UpdateCheckInit updateCheckInit;
 
     public void handleConnect(SRServerConnectedEvent event) {

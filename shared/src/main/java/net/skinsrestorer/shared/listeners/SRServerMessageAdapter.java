@@ -20,57 +20,33 @@ package net.skinsrestorer.shared.listeners;
 import lombok.RequiredArgsConstructor;
 import net.skinsrestorer.api.property.SkinProperty;
 import net.skinsrestorer.shared.api.SharedSkinApplier;
+import net.skinsrestorer.shared.codec.SRInputReader;
+import net.skinsrestorer.shared.codec.SRServerPluginMessage;
+import net.skinsrestorer.shared.gui.SRInventory;
 import net.skinsrestorer.shared.listeners.event.SRServerMessageEvent;
-import net.skinsrestorer.shared.log.SRLogger;
 import net.skinsrestorer.shared.plugin.SRServerAdapter;
-import net.skinsrestorer.shared.subjects.SRPlayer;
-import net.skinsrestorer.shared.utils.MessageProtocolUtil;
-import net.skinsrestorer.shared.utils.SRConstants;
+import net.skinsrestorer.shared.utils.SRHelpers;
 
 import javax.inject.Inject;
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.util.Map;
-import java.util.Optional;
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public final class SRServerMessageAdapter {
-    private final SRServerAdapter<?, ?> plugin;
+    private final SRServerAdapter serverAdapter;
     private final SharedSkinApplier<Object> skinApplier;
-    private final SRLogger logger;
 
     public void handlePluginMessage(SRServerMessageEvent event) {
-        if (!event.getChannel().equals(SRConstants.MESSAGE_CHANNEL)) {
+        if (!event.getChannel().equals(SRHelpers.MESSAGE_CHANNEL)) {
             return;
         }
 
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(event.getData()));
-
-        try {
-            String subChannel = in.readUTF();
-
-            if (subChannel.equalsIgnoreCase("returnSkinsV3")) {
-                Optional<SRPlayer> player = plugin.getPlayer(in.readUTF());
-                if (player.isEmpty()) {
-                    return;
-                }
-
-                int page = in.readInt();
-
-                short len = in.readShort();
-                byte[] msgBytes = new byte[len];
-                in.readFully(msgBytes);
-
-                Map<String, String> skinList = MessageProtocolUtil.convertToMap(msgBytes);
-
-                plugin.openProxyGUI(player.get(), page, skinList);
-            } else if (subChannel.equalsIgnoreCase("SkinUpdateV2")) {
-                skinApplier.applySkin(event.getPlayer().getAs(Object.class),
-                        SkinProperty.of(in.readUTF(), in.readUTF()));
+        serverAdapter.runAsync(() -> {
+            SRServerPluginMessage message = SRServerPluginMessage.CODEC.read(new SRInputReader(event.getData()));
+            SRServerPluginMessage.ChannelPayload<?> channelPayload = message.channelPayload();
+            if (channelPayload instanceof SRServerPluginMessage.GUIPageChannelPayload(SRInventory srInventory)) {
+                serverAdapter.openGUI(event.getPlayer(), srInventory);
+            } else if (channelPayload instanceof SRServerPluginMessage.SkinUpdateChannelPayload(SkinProperty skinProperty)) {
+                skinApplier.applySkin(event.getPlayer().getAs(Object.class), skinProperty);
             }
-        } catch (IOException e) {
-            logger.severe("Error while handling plugin message", e);
-        }
+        });
     }
 }
